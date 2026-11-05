@@ -59,9 +59,10 @@ once the old one is gone) gets a new id and heals on its first connect;
 ### Box ids
 
 min 0.8 ([gominimal/minimal#2756](https://github.com/gominimal/minimal/pull/2756))
-made a session name an alias: only a pending, materializing or running box
-holds it, a stopped box keeps it, a new box may take it, and min resolves a
-name to the running box, else the latest. Every min command min-vscode runs
+made a session name an alias: a stopped box keeps its name, and `min ls`
+still lists it, but it doesn't stop a new box from taking the name; only a
+running box (or a resume in flight) does. min resolves a name to the
+running box, else the latest. Every min command min-vscode runs
 on one box takes a full session id first, so min-vscode addresses its own
 boxes by id: `session exec` (prepare, `_proxy`, `ssh`'s ProxyCommand) and
 `session destroy`. The id is `sessions/NAME/id`, one line, checked against
@@ -75,9 +76,14 @@ Own means: a key dir whose recorded id `min ls` lists under the dir's name
 name, is not own). Own boxes are the ones that get a stanza and a
 `remote.SSH.remotePlatform` entry. A key dir from before ids is adopted, its
 id written, when exactly one box has its name, by a command that acts on
-the box (`open`, `attach`, `ssh`, `_proxy`, `destroy`, `gc`). `ssh-config`,
-`config`, `setup`, `status`, `gc --dry-run`, completions and `doctor` count
-it own without writing (`doctor` says it will be adopted). With several,
+that box (`open`, `attach`, `ssh`, `_proxy`, `destroy NAME`); only that
+box's key dir adopts, never another one on the way (the stanza and
+settings refresh after a connect). `ssh-config`, `config`, `setup`,
+`status`, `gc`, completions and `doctor` count it own without writing
+(`doctor` says it will be adopted). The extension's `destroy --own` and
+`gc` never adopt and destroy in one step: `destroy --own` refuses a key dir
+with no id ("attach it once"), and `gc` lists it as "no id recorded" without
+asking. With several,
 none is own, no stanza is written for it, and `doctor` warns; so does one
 box of that name that min lists with no usable id.
 The adoption has a risk: a legacy key dir whose own box is long gone adopts

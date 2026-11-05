@@ -26,9 +26,12 @@ All notable changes to this project are documented here. The format follows
 
 - The Minimal view's Destroy, Clean up and open no longer reach another
   tool's box from a stale row: the extension passes `--own`, and the CLI
-  refuses a name that is no longer one of its own boxes.
-- A `min ls` that exits 0 with output that is no session list (a warning
-  line first, or nothing) now counts as a failed one: nothing of min-vscode's is pruned.
+  refuses a name whose recorded id min no longer lists under it. Destroy
+  and Clean up (and `gc`) also leave a box whose key dir has no recorded
+  id yet (from before ids) alone until it has been attached once.
+- A `min ls` that exits 0 with output that is not one session list (a
+  warning line first, or nothing) now counts as a failed one: nothing of
+  min-vscode's is pruned.
 - Shells over ssh in a box whose `~/.bash_profile` (a user loadout's) does
   not source `~/.bashrc` now get the `min:workbench` and `min:motd` lines
   too: both writers add a marked `min:bashrc` line that sources it.

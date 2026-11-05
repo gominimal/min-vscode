@@ -75,13 +75,13 @@ shq() {
 pct() { printf '%s' "$1" | sed 's/%/%%/g'; }
 
 mn() { "$MIN" "$@"; }
-# min_ls: min ls --json, only when it is a session list: output min ls
-# exits 0 with but that is no JSON object with a `sessions` array (a warning
-# line first, nothing at all) fails like min ls itself, so no caller takes
-# it for "no box".
+# min_ls: min ls --json, only when it is one session list: output min ls
+# exits 0 with but that is not exactly one JSON object with a `sessions`
+# array of objects (a warning or JSON log line first, nothing at all) fails like min
+# ls itself, so no caller takes it for "no box".
 min_ls() {
     ml_j=$(mn ls --json </dev/null) || return 1
-    printf '%s' "$ml_j" | jq -e '.sessions | type == "array"' >/dev/null 2>&1 || return 1
+    printf '%s' "$ml_j" | jq -se 'length == 1 and (.[0].sessions | type == "array" and all(type == "object"))' >/dev/null 2>&1 || return 1
     printf '%s\n' "$ml_j"
 }
 
@@ -110,17 +110,20 @@ stored_id() {
 # for NAME (only an explicit NAME may reach it). 1: no box for NAME. 2:
 # several boxes named NAME, no id recorded. 3: sessions/NAME/id is no
 # session id. 7: no id recorded, and min lists one box named NAME with no id
-# (or one that is not a session id) to reach it by. A recorded id is never
+# (or one that is not a session id) to reach it by. 8: jq could not read LS
+# (never "none"). A recorded id is never
 # traded for a box found by name: 5, ours
 # is gone (min ls lists the id nowhere; prints how many boxes now have the
 # name); 6, ours was renamed outside min-vscode (min lists the id under
 # another name, or none: prints it, or "(no name)").
-# PICK_NOADOPT=1 (ssh-config, config, setup, status, gc --dry-run,
-# _sessions, doctor: commands that act on no one box): a key dir from before
+# PICK_NOADOPT=1 (ssh-config, config, setup, status, gc, _sessions, doctor:
+# commands that act on no one box; own_filter always): a key dir from before
 # ids still counts as own, but its id is not written; the next command that
-# acts on it (open, attach, ssh, _proxy, destroy, gc) writes it.
+# acts on that box (open, attach, ssh, _proxy, destroy NAME) writes it, for
+# that box only.
 PICK_NOADOPT=
 pick_id() {
+    valid_name "$1" || return 1   # never a path such as .. under sessions/
     pi_s=0; pi_r=$(stored_id "$1") || pi_s=$?
     [ "$pi_s" != 2 ] || return 3
     # listed at all is asked apart from the name: min's name may be null
@@ -130,7 +133,7 @@ pick_id() {
         | [.sessions[]? | select(.name == $n) | .id // ""]
         | if $listed and $rn == $n then "own \($r)" elif $listed then "renamed \($rn // "(no name)")"
           elif $r != "" then "gone \(length)"
-          elif length == 1 then "one \(.[0])" elif length == 0 then "none" else "several" end') || return 1
+          elif length == 1 then "one \(.[0])" elif length == 0 then "none" else "several" end') || return 8
     case $pi_l in
         "own "*) printf '%s' "${pi_l#own }"; return 0 ;;
         "renamed "*) printf '%s' "${pi_l#renamed }"; return 6 ;;
@@ -148,9 +151,14 @@ pick_id() {
 # pick_id's): 0 found (with own, only an own box counts); 1 none (BID
 # empty; ours, if any, is gone and no box has the name); 2 no id to trust
 # (several boxes named NAME, a bad id file, ours renamed outside
-# min-vscode, a box listed with no usable id): BWHY says why, never let min pick one by name; 5 ours is
+# min-vscode, a box listed with no usable id, an unreadable LS): BWHY says
+# why, never let min pick one by name; 5 ours is
 # gone and another box has the name now (BWHY): never that one.
 box_id() {
+    if ! valid_name "$1"; then
+        BID=; BWHY="session name is not lowercase letters, digits and dashes; not using it: $(printf '%s' "$1" | LC_ALL=C tr -c '[:print:]' '?')"
+        return 2
+    fi
     bi_s=0; BID=$(pick_id "$1" "$2") || bi_s=$?
     BWHY=
     case $bi_s in
@@ -162,6 +170,7 @@ box_id() {
                BWHY="Several boxes are named $1, and none is $TOOL's. Give the others new names with: min session rename ID NEW (min ls --json lists their ids)."
            fi ;;
         7) BWHY="min lists a box named $1 with no session id $TOOL can reach it by; not using it" ;;
+        8) BWHY="could not read min ls; not using $1" ;;
         3) BWHY="$(sess_dir "$1")/id is not a session id; not using it (write the box's id from min ls --json into it, or remove $(sess_dir "$1") if the box is gone)" ;;
         5) if [ "$BID" != 0 ]; then
                BID=; BWHY="your box $1 is gone; another box now has the name (remove $(sess_dir "$1") to reach it)"; return 5
@@ -201,7 +210,8 @@ own_filter() {
                [ -d "$s" ] || continue
                s=${s%/}; s=${s##*/}
                valid_name "$s" || continue
-               if of_i=$(pick_id "$s" "$of_j"); then printf '%s\n' "$of_i"; fi
+               # never adopts: only the box a command acts on does (box_id)
+               if of_i=$(PICK_NOADOPT=1; pick_id "$s" "$of_j"); then printf '%s\n' "$of_i"; fi
            done)
     printf '%s' "$of_j" | jq --arg k "$of_k" '($k | split("\n")) as $k | .sessions |= map(select(.id as $i | $k | index([$i])))'
 }
@@ -804,7 +814,8 @@ ask_destroy() {
 # min refused for want of a terminal to confirm unsaved changes on (a
 # client's call; on a terminal min asks itself).
 # NAME counts as gone (keys and records dropped, client_on_destroy run) only
-# when a min ls that succeeds lists its id no more. A failed min ls is
+# when a min ls that succeeds lists its id no more (a key dir with no id:
+# once no box is named NAME). A failed min ls is
 # unknown: everything stays (ssh-config is not rewritten), with a warning,
 # and after a y the status is non-zero (min's own, or 1 when it was 0); a
 # later `destroy NAME` drops what was kept once min ls lists NAME no more.
@@ -1295,6 +1306,11 @@ cmd_destroy() {
     fi
     [ -z "$force" ] || [ -n "$yes" ] || die "destroy: --force needs -y"
     kd=; valid_name "$name" && [ -d "$(sess_dir "$name")" ] && kd=1
+    # --own (the view's Destroy, Clean up) never adopts an id and destroys in
+    # one step: that box was picked by its name alone
+    if [ -n "$own_" ] && [ -n "$kd" ] && [ ! -e "$(sess_dir "$name")/id" ]; then
+        die "$name has no recorded box id yet; attach it once so $TOOL records it, or run $TOOL destroy $name in a terminal"
+    fi
     dj=$(min_ls 2>/dev/null) || { [ -z "$kd" ] || die "min ls failed; kept the keys of $name"; die "min ls failed"; }
     db=0; box_id "$name" "$dj" "$do_" || db=$?
     case $db in
@@ -1331,20 +1347,22 @@ cmd_gc() {
         esac
     done
     case $older in ''|*[!0-9]*) die "gc: --older-than takes whole seconds" ;; esac
-    [ -z "$dry" ] || PICK_NOADOPT=1   # only lists
     now=$(date +%s)
     own=$(own_ls) || die "min ls failed"
     # idle ages count from the first gc or status that saw the session unused
     track_orphans "$own" "$now" >/dev/null
     # since<TAB>name<TAB>id<TAB>project. A session not dated yet has an
-    # unknown age: it counts only when no threshold is given.
+    # unknown age: it counts only when no threshold is given. A key dir with
+    # no recorded id (from before ids) has id "-": listed, never asked about
+    # (gc never adopts an id and destroys in one step).
     rows=$(printf '%s' "$own" | jq -r '.sessions[] | select(.status == "active") | [.name, .id, (.project_path // "-")] | @tsv' \
         | while IFS='	' read -r n i p; do
-              ! box_in_use "$n" || continue
+              if box_in_use "$n" || box_in_use "$i"; then continue; fi
               ! hook client_linked "$n" || continue
               since=$(cat "$STATE/orphan/$n" 2>/dev/null || true)
               if [ -n "$since" ]; then [ $((now - since)) -ge "$older" ] || continue
               else [ "$older" = 0 ] || continue; since=$now; fi
+              stored_id "$n" >/dev/null || i=-
               printf '%s\t%s\t%s\t%s\n' "$since" "$n" "$i" "$p"
           done | sort -n)
     rc=0
@@ -1352,15 +1370,17 @@ cmd_gc() {
         echo "no active sessions without an ssh client"
     else
         { printf 'NAME\tPROJECT\tIDLE\n'
-          printf '%s\n' "$rows" | while IFS='	' read -r since n _ p; do
+          printf '%s\n' "$rows" | while IFS='	' read -r since n i p; do
               a=-; [ -f "$STATE/orphan/$n" ] && a=$(humanise_age $((now - since)))
+              [ "$i" != - ] || a="no id recorded (attach $n once)"
               printf '%s\t%s\t%s\n' "$n" "$p" "$a"
           done; } | table
         if [ -z "$dry" ]; then
             # NAME/ID words: own names are hostnames, ids hex and dashes
             for ni in $(printf '%s\n' "$rows" | awk -F'\t' '{ print $2 "/" $3 }'); do
                 n=${ni%%/*} i=${ni#*/}
-                gc_still_idle "$n" || { log "$n is in use now; not asking"; continue; }
+                [ "$i" != - ] || { log "$n has no recorded box id; not asking (attach $n once)"; continue; }
+                gc_still_idle "$n" "$i" || { log "$n is in use now; not asking"; continue; }
                 answer=$(ask_destroy "$n" "$i" y/N/q)
                 case $answer in q|Q) break ;; esac
                 destroy_one "$n" "$i" "$answer" || rc=$?
@@ -1370,11 +1390,11 @@ cmd_gc() {
     exit "$rc"
 }
 
-# st_used NAME ID OWN: status's in use. An own box by its name (its id maps
-# to it); another box by its id, or by a bare name no own box has
-# ($st_names).
+# st_used NAME ID OWN: status's in use. An own box by its name or its id
+# (one with no id file yet has no name mapped from it); another box by its
+# id, or by a bare name no own box has ($st_names).
 st_used() {
-    if [ "$3" = true ]; then box_in_use "$1"; return; fi
+    if [ "$3" = true ]; then box_in_use "$1" || box_in_use "$2"; return; fi
     box_in_use "$2" || { ! printf '%s\n' "$st_names" | grep -qxF -- "$1" && box_in_use "$1"; }
 }
 
@@ -1522,10 +1542,11 @@ EOT
                 s=${s%/}; n=${s##*/}
                 valid_name "$n" || continue
                 ds=0; di=$(pick_id "$n" "$dj") || ds=$?
-                [ "$ds" != 0 ] || [ -e "$s/id" ] || ds=8
+                [ "$ds" != 0 ] || [ -e "$s/id" ] || ds=9
                 case $ds in
                     7) row warn sessions "min lists a box named $n with no session id; $TOOL leaves it alone" "min ls --json" ;;
-                    8) row info sessions "$n will adopt box $di on next use (made before $TOOL recorded box ids)" ;;
+                    8) row warn sessions "could not read min ls for $n" "min ls --json" ;;
+                    9) row info sessions "$n will adopt box $di when a command acts on it (made before $TOOL recorded box ids)" ;;
                     2) row warn sessions "several boxes are named $n; $TOOL cannot tell which is its own, so it leaves them all alone" "give the others new names (min ls --json shows their ids; min session rename ID NEW), or remove $s" ;;
                     3) row warn sessions "$s/id is not a session id; $TOOL leaves $n alone" "write the box's id (min ls --json) into $s/id, or remove $s if the box is gone" ;;
                     5) row info sessions "$n's box is gone" "$TOOL destroy $n forgets it" ;;

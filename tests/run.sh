@@ -2456,7 +2456,7 @@ case_ids_report_only_no_adopt() {
         assert_no_file "$STATE/sessions/alpha/id"
     done
     run doctor
-    assert_out_contains "alpha will adopt box $ID_A on next use"
+    assert_out_contains "alpha will adopt box $ID_A when a command acts on it"
     assert_no_file "$STATE/sessions/alpha/id"
     # a command that acts on it adopts it
     run ssh alpha -- true
@@ -2503,7 +2503,8 @@ case_ids_unreadable_ls_keeps_everything() {
     run status --json
     assert_rc 1
     # empty output, and JSON with no session list, are no listing either
-    for junk in '' '{}' '{"sessions":null}'; do
+    for junk in '' '{}' '{"sessions":null}' '{"level":"info"}
+{"sessions":[]}'; do
         printf '%s' "$junk" > "$FIXTURES/sessions.json"
         reset_log
         run destroy -y alpha
@@ -2554,6 +2555,185 @@ case_ids_own_flag_refuses_foreign() {
     assert_log_contains "min session destroy $ID_A"
 }
 
+# only the box a command acts on adopts: the stanza and settings refresh
+# after a connect never writes another legacy key dir's id
+case_ids_adopt_only_target() {
+    mkdir -p "$HOME/.ssh" && : > "$HOME/$CONF"
+    cat > "$FIXTURES/sessions.json" <<JSON
+{"sessions":[{"id":"$ID_A","name":"alpha","project_path":"$AP","status":"active"},
+ {"id":"$ID_B","name":"beta","project_path":"$T/beta-proj","status":"active"}]}
+JSON
+    own_legacy alpha beta
+    printf 'box\n' > "$STATE/sessions/beta/user"
+    run config
+    assert_rc 0
+    run ssh alpha -- true
+    assert_rc 0
+    assert_file "$STATE/sessions/alpha/id" "$ID_A"
+    assert_no_file "$STATE/sessions/beta/id"
+    assert_file_contains "$HOME/$CONF" "Host ${HP}beta"   # still own, unadopted
+    rm -f "$STATE/sessions/alpha/id"
+    run attach alpha --no-window
+    assert_rc 0
+    assert_file "$STATE/sessions/alpha/id" "$ID_A"
+    assert_no_file "$STATE/sessions/beta/id"
+    [ "$(settings_get '.["remote.SSH.remotePlatform"] | has("'"${HP}beta"'")')" = true ] || fail "beta's settings entry dropped"
+}
+
+# never adopt and destroy in one step: the view's destroy --own and gc leave
+# a key dir with no id alone; a plain destroy NAME from a terminal may
+case_ids_no_adopt_and_destroy() {
+    own_legacy alpha
+    reset_log
+    for c in "destroy -y --own alpha" "destroy -y --if-idle --own alpha"; do
+        # shellcheck disable=SC2086  # a command and its words
+        run $c
+        assert_rc 1
+        assert_err_contains "alpha has no recorded box id yet; attach it once so $TOOL records it, or run $TOOL destroy alpha in a terminal"
+    done
+    run_stdin 'y
+' gc
+    assert_rc 0
+    assert_out_contains "no id recorded (attach alpha once)"
+    assert_err_contains "alpha has no recorded box id; not asking"
+    ! grep -qF "Destroy Minimal session alpha" "$T/err" || fail "gc asked about alpha"
+    assert_log_not_contains "session destroy"
+    assert_no_file "$STATE/sessions/alpha/id"
+    run destroy -y alpha
+    assert_rc 0
+    assert_log_contains "min session destroy $ID_A"
+}
+
+# status: a foreign box is in use by its id in ps
+case_ids_status_foreign_in_use_by_id() {
+    own alpha
+    printf '{"sessions":[{"id":"%s","name":"alpha","project_path":"%s","status":"active"},{"id":"%s","name":"herdr-box","project_path":"/h","status":"active"}]}\n' \
+        "$ID_A" "$AP" "$THEIRS" > "$FIXTURES/sessions.json"
+    exec_line 101 1 "$THEIRS"
+    run status --json
+    assert_rc 0
+    [ "$(jq -c 'map([.name, .own, .in_use])' "$T/out")" = '[["alpha",true,false],["herdr-box",false,true]]' ] \
+        || fail "status --json: $(cat "$T/out")"
+}
+
+# a failed min ls keeps the stanzas, but not one with a bad id
+case_ids_ls_failure_drops_bad_id_stanza() {
+    mkdir -p "$HOME/.ssh" && : > "$HOME/$CONF"
+    alpha_facts
+    run ssh-config
+    assert_file_contains "$HOME/$CONF" "Host ${HP}alpha"
+    echo 'not-an-id' > "$STATE/sessions/alpha/id"
+    printf 1 > "$FIXTURES/ls.fail-from"
+    run ssh-config
+    assert_file_not_contains "$HOME/$CONF" "Host ${HP}alpha"
+}
+
+# destroy --if-idle NAME of another tool's box (no key dir) in use by its id: exit 3
+case_ids_if_idle_foreign_in_use() {
+    printf '{"sessions":[{"id":"%s","name":"theirs","project_path":"/h","status":"active"}]}\n' "$THEIRS" > "$FIXTURES/sessions.json"
+    exec_line 101 1 "$THEIRS"
+    reset_log
+    run destroy -y --if-idle theirs
+    assert_rc 3
+    assert_log_not_contains "session destroy"
+}
+
+# every destroy and attach the extension sends carries --own
+case_ids_extension_passes_own() {
+    calls=$(grep -hoE "run\(\[('[^']*', )*'(destroy|attach)'[^]]*\]" "$ROOT"/extension/src/*.ts)
+    [ -n "$calls" ] || fail "no destroy/attach call found in the extension"
+    printf '%s\n' "$calls" | while IFS= read -r c; do
+        printf '%s' "$c" | grep -qF "'--own'" || fail "extension call without --own: $c"
+    done
+}
+
+# a session list min ls cannot hand over whole is no listing; and a jq
+# failure in pick_id is "could not read", never "none"
+case_ids_unreadable_entry_not_none() {
+    mkdir -p "$HOME/.ssh" && : > "$HOME/$CONF"
+    alpha_facts
+    printf '{"sessions":[{"id":"%s","name":"alpha","project_path":"%s","status":"active"},1]}\n' "$ID_A" "$AP" > "$FIXTURES/sessions.json"
+    reset_log
+    run destroy -y alpha
+    assert_rc 1
+    assert_file "$STATE/sessions/alpha/id" "$ID_A"
+    run open "$P" -n alpha --no-window
+    assert_rc 1
+    assert_log_not_contains "session destroy"
+    assert_log_not_contains "session activate"
+    sed '/^# ---- main/,$d' "$BIN" > "$T/lib"
+    # shellcheck disable=SC2016  # expanded by the inner sh
+    sh -c '. "$1"; s=0; box_id alpha "{\"sessions\":[1]}" || s=$?; printf "%s|%s" "$s" "$BWHY"' sh "$T/lib" >"$T/out" 2>"$T/err"
+    assert_out_eq "2|could not read min ls; not using alpha"
+}
+
+# an own box with no id file yet, reached by its id: in use for status and gc
+case_ids_legacy_in_use_by_id() {
+    own_legacy alpha
+    exec_line 101 1 "$ID_A"
+    run status --json
+    assert_rc 0
+    [ "$(jq -c 'map(select(.name == "alpha")) | map([.own, .in_use])' "$T/out")" = '[[true,true]]' ] \
+        || fail "status --json: $(cat "$T/out")"
+    run gc --dry-run
+    assert_out_contains "no active sessions without an ssh client"
+    assert_no_file "$STATE/sessions/alpha/id"
+}
+
+# two_boxes: alpha and beta listed.
+two_boxes() {
+    cat > "$FIXTURES/sessions.json" <<JSON
+{"sessions":[{"id":"$ID_A","name":"alpha","project_path":"$AP","status":"active"},
+ {"id":"$ID_B","name":"beta","project_path":"$T/beta-proj","status":"active"}]}
+JSON
+}
+
+# a bystander legacy key dir adopts nothing across open's reuse, gc answered
+# N, destroy's cwd lookup and the attach picker
+case_ids_bystander_never_adopts() {
+    mkdir -p "$HOME/.ssh" && : > "$HOME/$CONF"
+    two_boxes
+    own alpha; own_legacy beta
+    run open "$AP" --no-window
+    assert_rc 0
+    assert_out_eq "${HP}alpha"
+    assert_no_file "$STATE/sessions/beta/id"
+    run_stdin 'n
+n
+' gc
+    assert_rc 0
+    assert_no_file "$STATE/sessions/beta/id"
+    reset_log
+    (cd "$AP" && sh "$BIN" destroy -y >"$T/out" 2>"$T/err" </dev/null)
+    assert_log_contains "min session destroy $ID_A"
+    assert_no_file "$STATE/sessions/beta/id"
+    # the attach picker: alpha (its own id), beta listed beside it
+    two_boxes; own alpha
+    reset_log
+    python3 - "$BIN" > "$T/out" 2> "$T/err" <<'PY'
+import os, pty, sys
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp("sh", ["sh", sys.argv[1], "attach", "--no-window"])
+def read():
+    try: return os.read(fd, 1024)
+    except OSError: return b""
+buf = b""
+while b"session number: " not in buf:
+    b = read()
+    if not b: break
+    buf += b
+os.write(fd, b"1\n")
+while read(): pass
+_, st = os.waitpid(pid, 0)
+sys.exit(os.waitstatus_to_exitcode(st))
+PY
+    RC=$?
+    assert_rc 0
+    assert_log_contains "min session exec $ID_A sh -c <script>"
+    assert_no_file "$STATE/sessions/beta/id"
+}
+
 CASES="
 gc_no_own_sessions_yet open_activates_and_launches_editor open_reuses_live_session_for_path open_skips_foreign_session_for_path
 open_needs_ssh_config
@@ -2592,6 +2772,9 @@ ids_prepare_keeps_recorded_id ids_ls_failure_keeps_legacy_stanza
 ids_shared_name_reaches_ours ids_open_shared_name_refused ids_legacy_unique_adopted
 ids_legacy_ambiguous_not_own ids_activate_records_id ids_in_use_maps_id ids_corrupt_id_refused
 ids_gone_box_not_taken_over ids_unreadable_ls_keeps_everything ids_listed_without_id_not_gone ids_own_flag_refuses_foreign
+ids_adopt_only_target ids_no_adopt_and_destroy ids_status_foreign_in_use_by_id ids_ls_failure_drops_bad_id_stanza
+ids_if_idle_foreign_in_use ids_extension_passes_own
+ids_unreadable_entry_not_none ids_legacy_in_use_by_id ids_bystander_never_adopts
 "
 
 # Nothing under ~/.ssh unless the case opted in to ssh-config.

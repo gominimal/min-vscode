@@ -8,7 +8,7 @@ box, where `min-vscode` is not installed.
 | `min-vscode open [PATH] [-n NAME] [--no-window]` | the session for `PATH` (default `.`): a live one min-vscode has connected to is reused, else one is activated with `--loadout vscode`; then VS Code opens `/workbench` in it. Prints `min-vscode.NAME` |
 | `min-vscode new [PATH \| --empty] [-n NAME] [--no-window]` | always a new session for `PATH`, then VS Code; `--empty`: an empty `/workbench` (`--sync none`), named by min (`box-<hex>`) |
 | `min-vscode attach [NAME] [--no-window]` | an existing session in VS Code (no NAME: pick one of its own) |
-| `min-vscode destroy [-y] [--if-idle] [--force] [NAME]` | ask `[y/N]`, then destroy (no NAME: its one session for the current directory); `--if-idle` refuses with exit 3 while something is connected. Without a terminal, min refuses a session with unsaved changes: exit 4; `-y --force` discards them. When the `min ls` that follows fails, the session's keys and stanza stay, with a warning, and after a y the exit is non-zero (min's own status, or 1 when min destroyed it); once `min ls` no longer lists it, `destroy NAME` removes what was kept |
+| `min-vscode destroy [-y] [--if-idle] [--force] [NAME]` | ask `[y/N]`, then destroy (no NAME: its one session for the current directory); `--if-idle` refuses with exit 3 while something is connected. Without a terminal, min refuses a session with unsaved changes: exit 4; `-y --force` discards them. When the `min ls` that follows fails, the session's keys and stanza stay, with a warning, and after a y the exit is non-zero (min's own status, or 1 when min destroyed it); once `min ls` lists its id no more (a key dir with no id: once no box is named NAME), `destroy NAME` removes what was kept |
 | `min-vscode gc [--older-than SECONDS] [--dry-run]` | list active sessions no ssh client is using (oldest first), then ask `[y/N/q]` for each |
 | `min-vscode status [--json]` | table: session, status, project, in use, idle age; `--json`: `[{name, id, status, project, own, empty, in_use, idle}]` (`id`: min's session id; `own`: min-vscode's box, by that id; idle in seconds or null, own boxes only) |
 | `min-vscode doctor` | health report; exits 1 on any FAIL |
@@ -24,7 +24,9 @@ itself (`vscode-remote://ssh-remote+min-vscode.NAME/workbench`).
 Internal flags, for the extension: `attach --own NAME` and `destroy --own
 NAME` take NAME as a row of its own-box list, which may be stale: when NAME
 is no longer min-vscode's own box (another tool's box took the name), they
-refuse instead of reaching it.
+refuse instead of reaching it. `destroy --own` also refuses a key dir with
+no recorded id (from before ids): attach it once first. `gc` lists such a
+box as "no id recorded (attach NAME once)" and does not ask about it.
 
 Names: without `-n`, min names a new session (`<dir>-<hex>`, e.g.
 `myproject-3f9c`), and min-vscode takes the one new session for the path.
