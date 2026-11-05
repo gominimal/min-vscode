@@ -2867,6 +2867,17 @@ PY
     assert_no_file "$STATE/sessions/alpha/id"
 }
 
+
+# a new session min lists with no name is never recorded as "null"
+case_ids_activate_null_name() {
+    mkdir -p "$HOME/.ssh" && : > "$HOME/$CONF"
+    jq --arg p "$P" '.sessions += [{"id":"12121212-0000-4000-8000-000000000012","name":null,"project_path":$p,"status":"active"}]' \
+        "$FIXTURES/sessions.json" > "$FIXTURES/sessions.after.json"
+    run new "$P" --no-window
+    assert_rc 1
+    assert_err_contains "not a hostname"
+    assert_no_file "$STATE/sessions/null"
+}
 CASES="
 gc_no_own_sessions_yet open_activates_and_launches_editor open_reuses_live_session_for_path open_skips_foreign_session_for_path
 open_needs_ssh_config
@@ -2909,7 +2920,7 @@ ids_adopt_only_target ids_no_adopt_and_destroy ids_status_foreign_in_use_by_id i
 ids_if_idle_foreign_in_use ids_extension_passes_own
 ids_unreadable_entry_not_none ids_legacy_in_use_by_id ids_bystander_never_adopts
 ids_cwd_destroy_no_adopt ids_status_recorded ids_orphan_age_restarts_by_id ids_bare_name_in_use_own_only
-ids_open_other_dir_no_adopt ids_tty_destroy_by_id ids_destroy_never_writes_id
+ids_open_other_dir_no_adopt ids_tty_destroy_by_id ids_destroy_never_writes_id ids_activate_null_name
 "
 
 # Nothing under ~/.ssh unless the case opted in to ssh-config.
