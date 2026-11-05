@@ -28,6 +28,11 @@ long each has been idle.
 - **`remote.SSH.remotePlatform in the // min-vscode:begin block is not an
   object; fix it by hand`.** Something rewrote it inside the block; make it
   an object (or delete it), then run `min-vscode config` again.
+- **The VM will not start after going from `unstable` to `rc`.** Don't
+  downgrade `min` that way: the older daemon cannot read the box index the
+  newer one wrote ([minimal#3060](https://github.com/gominimal/minimal/issues/3060)).
+  If it has already happened, install the build that last wrote the volume
+  (`unstable`) again and run `min ls`.
 
 VS Code specifics (platform prompt):
 [vscode.md](vscode.md#troubleshooting).

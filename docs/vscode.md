@@ -138,6 +138,14 @@ the box instead of guessing.
   `min-vscode attach NAME`.
 - **Host key changed after recreating a session.** Reconnect: `_proxy`
   re-pins before sshd starts.
+- **Claude login fails in a box.** The browser authorizes, then
+  `localhost:PORT/callback` fails with `ERR_CONNECTION_REFUSED`. Workaround:
+  in VS Code's "Do you want Code to open the external website?" dialog,
+  choose **Configure Trusted Domains** and trust `claude.com` and all its
+  subdomains, then sign in again. Or sign in without the callback: open the
+  URL Claude prints in any browser and paste the code it returns back into
+  Claude. These are workarounds; the cause is not confirmed. Each box needs
+  its own sign-in.
 - **Window opens but the terminal is in `/home`.** The `min:workbench` rc
   line moves interactive shells that start in `$HOME`; sessions without the
   loadout get it on the next connect.
