@@ -11,6 +11,16 @@ All notable changes to this project are documented here. The format follows
   interactive `min-vscode ssh` session print it once, with
   "exit or close the terminal" as the detach hint. `min session attach`
   shells are unchanged.
+- **Boxes are reached by id** (min 0.8,
+  [gominimal/minimal#2756](https://github.com/gominimal/minimal/pull/2756),
+  lets boxes share a name and resolves a name to the running box):
+  min-vscode records each box's id in `STATE/sessions/NAME/id` and passes
+  it to every `min session exec` and `destroy`, so another tool's box of
+  the same name is never connected to or destroyed, and never listed (CLI,
+  the Minimal view, ssh stanzas, settings entries, and `status --json`,
+  which now carries each `id`). A key dir from before takes the id of the
+  one box with its name; when several share it, min-vscode leaves them
+  alone and `doctor` says so.
 
 ### Fixed
 
