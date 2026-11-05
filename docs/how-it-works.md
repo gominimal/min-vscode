@@ -76,7 +76,9 @@ Own means: a key dir whose recorded id `min ls` lists under the dir's name
 name, is not own). Own boxes are the ones that get a stanza and a
 `remote.SSH.remotePlatform` entry. A key dir from before ids is adopted, its
 id written, when exactly one box has its name, by a command that acts on
-that box (`open`, `attach`, `ssh`, `_proxy`, `destroy NAME`); only that
+that box (`open`, `attach`, `ssh`, `_proxy`; never `destroy`, which
+destroys by the id it finds but writes none, so an N leaves nothing
+behind); only that
 box's key dir adopts, never another one on the way (the stanza and
 settings refresh after a connect). `ssh-config`, `config`, `setup`,
 `status`, `gc`, completions and `doctor` count it own without writing

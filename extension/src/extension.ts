@@ -120,7 +120,7 @@ class Item extends vscode.TreeItem {
       : sb.idle !== null ? `idle ${age(sb.idle)}` : 'idle';
     this.description = state;
     this.tooltip = `${sb.name}\n${sb.empty ? 'empty box' : sb.project}\n${state}` +
-      (sb.recorded ? '' : '\nNo recorded box id yet: open it once before Destroy or Clean up.');
+      (sb.recorded ? '' : '\nNo recorded box id yet: attach it once (Open) before Destroy or Clean up.');
     this.iconPath = new vscode.ThemeIcon(sb.status !== 'active' ? 'vm-outline' : sb.in_use ? 'vm-active' : 'vm');
     this.command = { command: 'minimal.open', title: 'Open', arguments: [this] };
   }
@@ -251,7 +251,7 @@ async function destroy(item: Item | undefined, view: Boxes): Promise<void> {
 async function cleanUp(view: Boxes): Promise<void> {
   const unused = (await listBoxes()).filter((s) => s.status === 'active' && !s.in_use);
   // a box with no recorded id yet is refused by destroy --own: not asked about
-  for (const sb of unused.filter((s) => !s.recorded)) out.appendLine(`clean up: skipped ${sb.name}: no recorded box id yet (open it once)`);
+  for (const sb of unused.filter((s) => !s.recorded)) out.appendLine(`clean up: skipped ${sb.name}: no recorded box id yet (attach it once)`);
   const idle = unused.filter((s) => s.recorded).sort((a, b) => (b.idle ?? 0) - (a.idle ?? 0));
   if (idle.length === 0) { vscode.window.showInformationMessage('No idle Minimal boxes.'); return; }
   for (const sb of idle) {

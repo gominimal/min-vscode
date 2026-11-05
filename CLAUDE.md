@@ -82,9 +82,11 @@ the editor-specific constants, settings keys and loadout differ.
   `ssh-config`, `config`, `setup` (all their forms), `status`, `_sessions`
   and `doctor` set, and `own_filter` (so `gc`'s list) always uses: they act on no
   one box, and count it own without writing; only the box that
-  open/attach/ssh/`_proxy`/`destroy NAME` acts on adopts, never another key
-  dir on the way, and never `destroy --own` or `gc`, which refuse or skip a
-  key dir with no id rather than adopt and destroy in one step); a jq
+  open/attach/ssh/`_proxy` acts on adopts, never another key dir on the
+  way; `destroy` never writes an id (it runs under `PICK_NOADOPT`: an N or
+  an exit 3 leaves none behind), and `destroy --own`, cwd `destroy` and
+  `gc` refuse or skip a key dir with no id rather than adopt and destroy in
+  one step); a jq
   failure on the listing (`pick_id` 8, "could not read min ls") or
   several boxes named NAME, none recorded, a bad `id` file, or one
   listed box named NAME with no usable id (`pick_id` 7): no id

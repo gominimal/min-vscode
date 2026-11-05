@@ -2456,7 +2456,7 @@ case_ids_report_only_no_adopt() {
         assert_no_file "$STATE/sessions/alpha/id"
     done
     run doctor
-    assert_out_contains "alpha will adopt box $ID_A when a command acts on it"
+    assert_out_contains "alpha will adopt box $ID_A when you open, attach or ssh to it"
     assert_no_file "$STATE/sessions/alpha/id"
     # a command that acts on it adopts it
     run ssh alpha -- true
@@ -2828,6 +2828,45 @@ PY
     assert_no_file "$STATE/sessions/alpha"
 }
 
+# destroy never writes an id: answered N on a terminal, or --if-idle while
+# in use, a legacy key dir stays unrecorded, and gc still will not ask
+case_ids_destroy_never_writes_id() {
+    own_legacy alpha
+    reset_log
+    python3 - "$BIN" > "$T/out" 2> "$T/err" <<'PY'
+import os, pty, sys
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp("sh", ["sh", sys.argv[1], "destroy", "alpha"])
+def read():
+    try: return os.read(fd, 1024)
+    except OSError: return b""
+buf = b""
+while b"[y/N]" not in buf:
+    b = read()
+    if not b: break
+    buf += b
+os.write(fd, b"n\n")
+while read(): pass
+_, st = os.waitpid(pid, 0)
+sys.exit(os.waitstatus_to_exitcode(st))
+PY
+    RC=$?
+    assert_rc 0
+    assert_log_not_contains "session destroy"
+    assert_no_file "$STATE/sessions/alpha/id"
+    exec_line 101 1 "$ID_A"
+    run destroy -y --if-idle alpha
+    assert_rc 3
+    assert_no_file "$STATE/sessions/alpha/id"
+    : > "$FIXTURES/ps.txt"
+    run gc --dry-run
+    assert_rc 0
+    assert_out_contains "no id recorded (attach alpha once)"
+    assert_log_not_contains "session destroy"
+    assert_no_file "$STATE/sessions/alpha/id"
+}
+
 CASES="
 gc_no_own_sessions_yet open_activates_and_launches_editor open_reuses_live_session_for_path open_skips_foreign_session_for_path
 open_needs_ssh_config
@@ -2870,7 +2909,7 @@ ids_adopt_only_target ids_no_adopt_and_destroy ids_status_foreign_in_use_by_id i
 ids_if_idle_foreign_in_use ids_extension_passes_own
 ids_unreadable_entry_not_none ids_legacy_in_use_by_id ids_bystander_never_adopts
 ids_cwd_destroy_no_adopt ids_status_recorded ids_orphan_age_restarts_by_id ids_bare_name_in_use_own_only
-ids_open_other_dir_no_adopt ids_tty_destroy_by_id
+ids_open_other_dir_no_adopt ids_tty_destroy_by_id ids_destroy_never_writes_id
 "
 
 # Nothing under ~/.ssh unless the case opted in to ssh-config.

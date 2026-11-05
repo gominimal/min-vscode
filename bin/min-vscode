@@ -121,7 +121,7 @@ stored_id() {
 # (stanzas, settings, open's reuse, pickers, cwd lookup, gc, status,
 # _sessions) from adopting; ssh-config, config, setup, status, _sessions and
 # doctor also set it for the whole run. Only the box a command acts on
-# (open, attach, ssh, _proxy, destroy NAME: box_id/need_box) adopts.
+# (open, attach, ssh, _proxy: box_id/need_box) adopts; destroy never does.
 PICK_NOADOPT=
 pick_id() {
     valid_name "$1" || return 1   # never a path such as .. under sessions/
@@ -1286,6 +1286,10 @@ cmd_attach() {
 # exit 4, and the client asks again before -y --force discards them.
 cmd_destroy() {
     yes='' ifidle='' force='' name='' own_=''
+    # destroy never writes an id: an N or an --if-idle exit 3 must not leave
+    # a legacy key dir adopted (gc would then offer it); pick_id still
+    # prints the id destroy_one destroys by
+    PICK_NOADOPT=1
     while [ $# -gt 0 ]; do
         case $1 in
             -y|--yes) yes=1; shift ;;
@@ -1552,7 +1556,7 @@ EOT
                 case $ds in
                     7) row warn sessions "min lists a box named $n with no session id; $TOOL leaves it alone" "min ls --json" ;;
                     8) row warn sessions "could not read min ls for $n" "min ls --json" ;;
-                    9) row info sessions "$n will adopt box $di when a command acts on it (made before $TOOL recorded box ids)" ;;
+                    9) row info sessions "$n will adopt box $di when you open, attach or ssh to it (made before $TOOL recorded box ids)" ;;
                     2) row warn sessions "several boxes are named $n; $TOOL cannot tell which is its own, so it leaves them all alone" "give the others new names (min ls --json shows their ids; min session rename ID NEW), or remove $s" ;;
                     3) row warn sessions "$s/id is not a session id; $TOOL leaves $n alone" "write the box's id (min ls --json) into $s/id, or remove $s if the box is gone" ;;
                     5) row info sessions "$n's box is gone" "$TOOL destroy $n forgets it" ;;
