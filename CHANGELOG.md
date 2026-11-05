@@ -16,9 +16,11 @@ All notable changes to this project are documented here. The format follows
   lets boxes share a name and resolves a name to the running box):
   min-vscode records each box's id in `STATE/sessions/NAME/id` and passes
   it to every `min session exec` and `destroy`, so another tool's box of
-  the same name is never connected to or destroyed, and never listed (CLI,
-  the Minimal view, ssh stanzas, settings entries, and `status --json`,
-  which now carries each `id`). A key dir from before takes the id of the
+  the same name is never reached under min-vscode's record or by a name
+  min-vscode chose (the CLI's lists, the Minimal view, ssh stanzas,
+  settings entries; `status --json` now carries each `id` and whether it is
+  the `recorded` one); a box you name explicitly becomes min-vscode's once
+  it connects. A key dir from before takes the id of the
   one box with its name; when several share it, min-vscode leaves them
   alone and `doctor` says so.
 

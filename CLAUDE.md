@@ -98,7 +98,9 @@ the editor-specific constants, settings keys and loadout differ.
   cwd, the `attach` picker, and the extension's view: hidden `--own` on
   `attach` and `destroy`) resolves with `own`; with `--own`, a NAME that is
   no own box any more dies ("NAME is not a box of min-vscode's", or `BWHY`),
-  and `destroy --own` on a key dir with no id dies too. A failed `min ls`
+  and `destroy --own`, or `destroy` with no NAME (cwd lookup), on a key dir
+  with no id dies too; Clean up offers only `own && recorded` rows
+  (`status --json`'s `recorded`: `sessions/NAME/id` holds the row's id). A failed `min ls`
   keeps every stanza but a bad-id one. An explicit NAME that is not own and has
   no recorded id reaches the one box of that name (`attach`, `ssh`, `open
   -n`, `destroy`), refused when several share it; `_proxy NAME` only an own
@@ -111,14 +113,13 @@ the editor-specific constants, settings keys and loadout differ.
   boxes made by `min` alone are never listed. The same holds wherever a
   session is chosen for the user: `open`'s reuse of a live session for PATH,
   `destroy`'s cwd lookup, the `attach` picker and `_sessions` (completions).
-  Only an explicit NAME (`attach NAME`, `destroy NAME`, `open -n NAME`) may
+  Only an explicit NAME (`attach NAME`, `ssh NAME`, `destroy NAME`, `open -n NAME`) may
   reach another tool's box.
 - In use = some host process runs `min session exec X ... sshd` (any ssh
-  client's connection); X is an id (`in_use_names` also prints the name
-  whose `sessions/NAME/id` holds it) or a bare name (connections from before
-  ids, other tools); an own box counts by its name or its id (one with no
-  `id` file yet maps no id to its name), in `status` and in `gc`'s list and
-  re-check. Never contact a box without such a live process: a
+  client's connection); X is an id or a bare name (connections from before
+  ids, other tools); an own box counts by its name or its id wherever in
+  use is asked (`status`, `track_orphans`, `gc`'s list and re-check,
+  `destroy --if-idle`). Never contact a box without such a live process: a
   connect starts a stopped box.
 - `gc` re-checks `gc_still_idle` before each question.
 - `config`/doctor never prune on a failed `min ls`. `--remove` restores the

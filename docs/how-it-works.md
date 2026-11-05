@@ -80,10 +80,12 @@ that box (`open`, `attach`, `ssh`, `_proxy`, `destroy NAME`); only that
 box's key dir adopts, never another one on the way (the stanza and
 settings refresh after a connect). `ssh-config`, `config`, `setup`,
 `status`, `gc`, completions and `doctor` count it own without writing
-(`doctor` says it will be adopted). The extension's `destroy --own` and
-`gc` never adopt and destroy in one step: `destroy --own` refuses a key dir
-with no id ("attach it once"), and `gc` lists it as "no id recorded" without
-asking. With several,
+(`doctor` says it will be adopted). The extension's `destroy --own`,
+`destroy` with no NAME (the current directory's box) and `gc` never adopt
+and destroy in one step: the first two refuse a key dir with no id ("attach
+it once"), `gc` lists it as "no id recorded" without asking, and the view's
+Clean up skips it (`status --json` gives `recorded: false`). `open` adopts
+only through `prepare`, after its checks of the folder. With several,
 none is own, no stanza is written for it, and `doctor` warns; so does one
 box of that name that min lists with no usable id.
 The adoption has a risk: a legacy key dir whose own box is long gone adopts
@@ -137,8 +139,8 @@ Include deletes those, so `~/.ssh/config` ends byte for byte as it was.
 `in_use_names` reads the host process table (`ps -xo pid=,ppid=,args=`)
 for processes whose argv has `session exec X <path ending /sshd>`:
 `_proxy` after its exec, ControlPersist masters, any ssh client. X is an id
-(mapped back to its name through the `sessions/NAME/id` files) or, for
-connections opened before ids or by other tools, a name. Nothing
+or, for connections opened before ids or by other tools, a name; a box
+counts as in use when either its name or its id is there. Nothing
 contacts a box to find out.
 
 ## Client layer

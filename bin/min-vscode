@@ -116,11 +116,12 @@ stored_id() {
 # is gone (min ls lists the id nowhere; prints how many boxes now have the
 # name); 6, ours was renamed outside min-vscode (min lists the id under
 # another name, or none: prints it, or "(no name)").
-# PICK_NOADOPT=1 (ssh-config, config, setup, status, gc, _sessions, doctor:
-# commands that act on no one box; own_filter always): a key dir from before
-# ids still counts as own, but its id is not written; the next command that
-# acts on that box (open, attach, ssh, _proxy, destroy NAME) writes it, for
-# that box only.
+# PICK_NOADOPT=1: a key dir from before ids still counts as own, but its id
+# is not written. own_filter always sets it, which is what keeps every list
+# (stanzas, settings, open's reuse, pickers, cwd lookup, gc, status,
+# _sessions) from adopting; ssh-config, config, setup, status, _sessions and
+# doctor also set it for the whole run. Only the box a command acts on
+# (open, attach, ssh, _proxy, destroy NAME: box_id/need_box) adopts.
 PICK_NOADOPT=
 pick_id() {
     valid_name "$1" || return 1   # never a path such as .. under sessions/
@@ -859,24 +860,17 @@ drop_gone() {
 
 # Sessions whose box serves an ssh connection right now, one per line: any
 # host process `min session exec X .../sshd` (_proxy, `ssh`, scp, any
-# client's own ssh, whatever its Host prefix). X is a box's id (ours: also
-# the name whose sessions/NAME/id holds it) or, from connections opened
-# before ids or by other tools, a name. Read from ps, so a stopped box is
-# never started to ask.
+# client's own ssh, whatever its Host prefix). X is a box's id or, from
+# connections opened before ids or by other tools, a name: callers ask
+# box_in_use for both a box's name and its id. Read from ps, so a stopped
+# box is never started to ask.
 in_use_names() {
     ps -xo pid=,ppid=,args= 2>/dev/null | awk '
         { k = split($0, w, /[ \t]+/)
           for (i = 1; i + 3 <= k; i++) {
               if (w[i] != "session" || w[i + 1] != "exec" || w[i + 2] !~ /^[a-z0-9][a-z0-9-]*$/) continue
               m = split(w[i + 3], q, "/"); if (q[m] == "sshd") { print w[i + 2]; break }
-          } }' | sort -u | while IFS= read -r iu; do
-            printf '%s\n' "$iu"
-            fact_ok "$ID_ERE" "$iu" || continue
-            grep -lxF -- "$iu" "$STATE"/sessions/*/id 2>/dev/null | while IFS= read -r iu_f; do
-                iu_f=${iu_f%/id}; iu_f=${iu_f##*/}
-                if valid_name "$iu_f" && [ "$(stored_id "$iu_f" || :)" = "$iu" ]; then printf '%s\n' "$iu_f"; fi
-            done
-        done
+          } }' | sort -u
 }
 # gc_still_idle NAME [ID]: right before a gc asks about NAME, look again (the
 # user may have connected while earlier questions were open): not in use
@@ -891,25 +885,32 @@ gc_still_idle() {
 # box_in_use NAME|ID: it is in in_use_names, read once per run (track_orphans
 # and gc_still_idle read it afresh).
 box_in_use() {
+    [ -n "$1" ] || return 1
     [ -n "${INUSE_DONE:-}" ] || { INUSE=$(in_use_names); INUSE_DONE=1; }
     printf '%s\n' "$INUSE" | grep -qxF -- "$1"
 }
 
 # track_orphans LS_JSON NOW: orphan/NAME = epoch an active session was first
-# seen neither held by this client (client_linked) nor in use (box_in_use);
+# seen neither held by this client (client_linked) nor in use (box_in_use,
+# by its name or its id);
 # a session in use restarts its age, so it counts from the last use. Removed
 # once linked or no longer active. kept/NAME goes with the session. Prints the orphans not in use now, one per line.
 track_orphans() {
     mkdir -p "$STATE/orphan" "$STATE/kept"
     INUSE_DONE=
     orphans=
-    for n in $(printf '%s' "$1" | jq -r '.sessions[] | select(.status == "active") | .name'); do
-        hook client_linked "$n" || orphans="$orphans$n
+    # NAME/ID words: own names are hostnames, ids hex and dashes (or empty)
+    for ni in $(printf '%s' "$1" | jq -r '.sessions[] | select(.status == "active") | "\(.name)/\(.id // "")"'); do
+        hook client_linked "${ni%%/*}" || orphans="$orphans$ni
 "
     done
     all=$(printf '%s' "$1" | jq -r '.sessions[].name')
-    for n in $orphans; do
-        if box_in_use "$n"; then printf '%s' "$2" > "$STATE/orphan/$n"; continue; fi
+    names=
+    for ni in $orphans; do
+        n=${ni%%/*} i=${ni#*/}
+        names="$names$n
+"
+        if box_in_use "$n" || box_in_use "$i"; then printf '%s' "$2" > "$STATE/orphan/$n"; continue; fi
         [ -f "$STATE/orphan/$n" ] || printf '%s' "$2" > "$STATE/orphan/$n"
         printf '%s\n' "$n"
     done
@@ -917,7 +918,7 @@ track_orphans() {
         [ -f "$f" ] || continue
         n=${f##*/}
         case $f in
-            "$STATE"/orphan/*) printf '%s\n' "$orphans" | grep -qxF -- "$n" || rm -f "$f" ;;
+            "$STATE"/orphan/*) printf '%s\n' "$names" | grep -qxF -- "$n" || rm -f "$f" ;;
             *) printf '%s\n' "$all" | grep -qxF -- "$n" || rm -f "$f" ;;   # kept/
         esac
     done
@@ -1213,6 +1214,9 @@ connect() {
 cmd_open() {
     mode=$1; shift
     path=. name='' gave='' nowin='' empty=''
+    # adoption waits for prepare (connect): a NAME refused below (another
+    # folder's, already there for new) never gets an id written
+    PICK_NOADOPT=1
     while [ $# -gt 0 ]; do
         case $1 in
             -n|--name) [ $# -ge 2 ] || die "$mode: -n needs a NAME"; name=$2; shift 2 ;;
@@ -1306,9 +1310,10 @@ cmd_destroy() {
     fi
     [ -z "$force" ] || [ -n "$yes" ] || die "destroy: --force needs -y"
     kd=; valid_name "$name" && [ -d "$(sess_dir "$name")" ] && kd=1
-    # --own (the view's Destroy, Clean up) never adopts an id and destroys in
-    # one step: that box was picked by its name alone
-    if [ -n "$own_" ] && [ -n "$kd" ] && [ ! -e "$(sess_dir "$name")/id" ]; then
+    # a NAME chosen for the user (the cwd lookup; --own: the view's Destroy,
+    # Clean up) never adopts an id and destroys in one step: that box was
+    # picked by its name alone
+    if [ "$do_" = own ] && [ -n "$kd" ] && [ ! -e "$(sess_dir "$name")/id" ]; then
         die "$name has no recorded box id yet; attach it once so $TOOL records it, or run $TOOL destroy $name in a terminal"
     fi
     dj=$(min_ls 2>/dev/null) || { [ -z "$kd" ] || die "min ls failed; kept the keys of $name"; die "min ls failed"; }
@@ -1400,7 +1405,7 @@ st_used() {
 
 # status [--json]. --json: one object per session whose name is a valid
 # hostname: name, id, status, project, own (prepared by this tool:
-# own_filter), empty (made by new --empty), in_use, idle (seconds since first
+# own_filter), recorded (sessions/NAME/id holds this id), empty (made by new --empty), in_use, idle (seconds since first
 # seen unused, or null; own sessions only).
 cmd_status() {
     case ${1:-} in '') json= ;; --json) json=1 ;; *) die "status: unknown option $1" ;; esac
@@ -1418,10 +1423,11 @@ cmd_status() {
                   o=false; [ "$i" != - ] && printf '%s\n' "$st_ids" | grep -qxF -- "$i" && o=true
                   u=false; st_used "$n" "$i" "$o" && u=true
                   a=null; [ "$o" = true ] && [ "$u" = false ] && [ -f "$STATE/orphan/$n" ] && a=$((now - $(cat "$STATE/orphan/$n")))
+                  r=false; [ "$i" != - ] && [ "$(stored_id "$n" 2>/dev/null || :)" = "$i" ] && r=true
                   [ "$i" != - ] || i=
                   jq -nc --arg n "$n" --arg i "$i" --arg s "$s" --arg p "$p" --argjson u "$u" --argjson a "$a" \
-                      --argjson o "$o" --arg sb "$STATE/box" \
-                      '{name: $n, id: $i, status: $s, project: $p, own: $o, empty: ($p == $sb), in_use: $u, idle: $a}'
+                      --argjson o "$o" --argjson r "$r" --arg sb "$STATE/box" \
+                      '{name: $n, id: $i, status: $s, project: $p, own: $o, recorded: $r, empty: ($p == $sb), in_use: $u, idle: $a}'
               done | jq -s .
         return
     fi

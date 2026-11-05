@@ -1005,7 +1005,7 @@ case_status_json() {
     assert_rc 0
     j=$(cat "$T/out")
     [ "$(printf '%s' "$j" | jq -r 'map(.name) | join(" ")')" = "alpha beta gamma stopped box-amber" ] || fail "names: $j"
-    [ "$(printf '%s' "$j" | jq -c '.[0]')" = "{\"name\":\"alpha\",\"id\":\"$ID_A\",\"status\":\"active\",\"project\":\"$AP\",\"own\":true,\"empty\":false,\"in_use\":true,\"idle\":null}" ] \
+    [ "$(printf '%s' "$j" | jq -c '.[0]')" = "{\"name\":\"alpha\",\"id\":\"$ID_A\",\"status\":\"active\",\"project\":\"$AP\",\"own\":true,\"recorded\":true,\"empty\":false,\"in_use\":true,\"idle\":null}" ] \
         || fail "alpha: $(printf '%s' "$j" | jq -c '.[0]')"
     b=$(printf '%s' "$j" | jq '.[1].idle')
     [ "$b" -ge 7200 ] && [ "$b" -lt 7260 ] || fail "beta idle: $b"
@@ -2734,6 +2734,100 @@ PY
     assert_no_file "$STATE/sessions/beta/id"
 }
 
+# destroy with no NAME (the cwd lookup) never adopts and destroys in one step
+case_ids_cwd_destroy_no_adopt() {
+    own_legacy alpha
+    printf '{"sessions":[{"id":"%s","name":"alpha","project_path":"%s","status":"active"}]}\n' "$THEIRS" "$AP" > "$FIXTURES/sessions.json"
+    reset_log
+    (cd "$AP" && sh "$BIN" destroy -y >"$T/out" 2>"$T/err" </dev/null); RC=$?
+    assert_rc 1
+    assert_err_contains "alpha has no recorded box id yet"
+    assert_log_not_contains "session destroy"
+    assert_no_file "$STATE/sessions/alpha/id"
+}
+
+# status --json: recorded is true only for the id in sessions/NAME/id
+case_ids_status_recorded() {
+    two_boxes
+    own alpha; own_legacy beta
+    run status --json
+    assert_rc 0
+    [ "$(jq -c 'map([.name, .own, .recorded])' "$T/out")" = '[["alpha",true,true],["beta",true,false]]' ] \
+        || fail "status --json: $(cat "$T/out")"
+}
+
+# track_orphans: an own box in use by its id restarts its idle age
+case_ids_orphan_age_restarts_by_id() {
+    own alpha
+    exec_line 101 1 "$ID_A"
+    age alpha 7200
+    run status
+    assert_rc 0
+    a=$(cat "$STATE/orphan/alpha")
+    [ $(($(date +%s) - a)) -lt 60 ] || fail "orphan/alpha not restarted: $a"
+}
+
+# a bare-name connection counts for the own box of that name, not the
+# foreign one beside it
+case_ids_bare_name_in_use_own_only() {
+    own alpha
+    printf '{"sessions":[{"id":"%s","name":"alpha","project_path":"%s","status":"active"},{"id":"%s","name":"alpha","project_path":"/h","status":"active"}]}\n' \
+        "$ID_A" "$AP" "$THEIRS" > "$FIXTURES/sessions.json"
+    exec_line 101 1 alpha
+    run status --json
+    assert_rc 0
+    [ "$(jq -c 'map([.id, .own, .in_use])' "$T/out")" = "[[\"$ID_A\",true,true],[\"$THEIRS\",false,false]]" ] \
+        || fail "status --json: $(cat "$T/out")"
+}
+
+# open -n NAME PATH on a legacy key dir of another folder: refused before any
+# id is written
+case_ids_open_other_dir_no_adopt() {
+    mkdir -p "$HOME/.ssh" && : > "$HOME/$CONF"
+    own_legacy alpha
+    run open "$P" -n alpha --no-window
+    assert_rc 1
+    assert_err_contains "session alpha is for $AP, not $P"
+    assert_no_file "$STATE/sessions/alpha/id"
+    run new "$AP" -n alpha --no-window
+    assert_rc 1
+    assert_err_contains "session alpha already exists"
+    assert_no_file "$STATE/sessions/alpha/id"
+    # the right folder adopts, through prepare
+    run open "$AP" -n alpha --no-window
+    assert_rc 0
+    assert_file "$STATE/sessions/alpha/id" "$ID_A"
+}
+
+# destroy on a terminal: answered y, min destroys the box by its id
+case_ids_tty_destroy_by_id() {
+    own alpha
+    reset_log
+    python3 - "$BIN" > "$T/out" 2> "$T/err" <<'PY'
+import os, pty, sys
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp("sh", ["sh", sys.argv[1], "destroy", "alpha"])
+def read():
+    try: return os.read(fd, 1024)
+    except OSError: return b""
+buf = b""
+while b"[y/N]" not in buf:
+    b = read()
+    if not b: break
+    buf += b
+os.write(fd, b"y\n")
+while read(): pass
+_, st = os.waitpid(pid, 0)
+sys.exit(os.waitstatus_to_exitcode(st))
+PY
+    RC=$?
+    assert_rc 0
+    assert_log_contains "min session destroy $ID_A"
+    assert_log_not_contains "min session destroy alpha"
+    assert_no_file "$STATE/sessions/alpha"
+}
+
 CASES="
 gc_no_own_sessions_yet open_activates_and_launches_editor open_reuses_live_session_for_path open_skips_foreign_session_for_path
 open_needs_ssh_config
@@ -2775,6 +2869,8 @@ ids_gone_box_not_taken_over ids_unreadable_ls_keeps_everything ids_listed_withou
 ids_adopt_only_target ids_no_adopt_and_destroy ids_status_foreign_in_use_by_id ids_ls_failure_drops_bad_id_stanza
 ids_if_idle_foreign_in_use ids_extension_passes_own
 ids_unreadable_entry_not_none ids_legacy_in_use_by_id ids_bystander_never_adopts
+ids_cwd_destroy_no_adopt ids_status_recorded ids_orphan_age_restarts_by_id ids_bare_name_in_use_own_only
+ids_open_other_dir_no_adopt ids_tty_destroy_by_id
 "
 
 # Nothing under ~/.ssh unless the case opted in to ssh-config.

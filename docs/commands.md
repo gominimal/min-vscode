@@ -10,7 +10,7 @@ box, where `min-vscode` is not installed.
 | `min-vscode attach [NAME] [--no-window]` | an existing session in VS Code (no NAME: pick one of its own) |
 | `min-vscode destroy [-y] [--if-idle] [--force] [NAME]` | ask `[y/N]`, then destroy (no NAME: its one session for the current directory); `--if-idle` refuses with exit 3 while something is connected. Without a terminal, min refuses a session with unsaved changes: exit 4; `-y --force` discards them. When the `min ls` that follows fails, the session's keys and stanza stay, with a warning, and after a y the exit is non-zero (min's own status, or 1 when min destroyed it); once `min ls` lists its id no more (a key dir with no id: once no box is named NAME), `destroy NAME` removes what was kept |
 | `min-vscode gc [--older-than SECONDS] [--dry-run]` | list active sessions no ssh client is using (oldest first), then ask `[y/N/q]` for each |
-| `min-vscode status [--json]` | table: session, status, project, in use, idle age; `--json`: `[{name, id, status, project, own, empty, in_use, idle}]` (`id`: min's session id; `own`: min-vscode's box, by that id; idle in seconds or null, own boxes only) |
+| `min-vscode status [--json]` | table: session, status, project, in use, idle age; `--json`: `[{name, id, status, project, own, recorded, empty, in_use, idle}]` (`id`: min's session id; `own`: min-vscode's box, by that id; `recorded`: that id is in `STATE/sessions/NAME/id` (an own box from before ids is not, until a command acts on it); idle in seconds or null, own boxes only) |
 | `min-vscode doctor` | health report; exits 1 on any FAIL |
 | `min-vscode setup [--remove]` | the whole install from this copy: links `~/.local/bin/min-vscode` and the `vscode` loadout here, then `ssh-config` and `config`; `--remove` undoes only ours |
 | `min-vscode config [--remove\|--print]` | opt in to (or out of) the settings block; `--print` only prints |
@@ -25,7 +25,9 @@ Internal flags, for the extension: `attach --own NAME` and `destroy --own
 NAME` take NAME as a row of its own-box list, which may be stale: when NAME
 is no longer min-vscode's own box (another tool's box took the name), they
 refuse instead of reaching it. `destroy --own` also refuses a key dir with
-no recorded id (from before ids): attach it once first. `gc` lists such a
+no recorded id (from before ids): attach it once first; so does `destroy`
+with no NAME (the current directory's box), and the view's Clean up skips
+such a box (`recorded: false`). `gc` lists such a
 box as "no id recorded (attach NAME once)" and does not ask about it.
 
 Names: without `-n`, min names a new session (`<dir>-<hex>`, e.g.
@@ -44,7 +46,7 @@ under `STATE/sessions/NAME`, and the box's id in `STATE/sessions/NAME/id`);
 boxes it has never connected to (made by other tools or `min` alone) are not
 its to tidy. `open` without `-n`, `destroy` without NAME, the `attach` picker
 and completions pass them over too; only an explicit name (`attach NAME`,
-`destroy NAME`, `open -n NAME`) reaches one.
+`ssh NAME`, `destroy NAME`, `open -n NAME`) reaches one.
 
 Box ids: since min 0.8 several boxes may share a name (a stopped box keeps
 it, and a new one may take it), and min picks the running one, else the
