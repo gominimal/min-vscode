@@ -36,7 +36,15 @@ the editor-specific constants, settings keys and loadout differ.
   `open`/`attach`/`ssh`/`_proxy`, so a recreated session self-heals.
   `_proxy` always runs `prepare` and writes nothing to stdout before `exec`
   (stdout is the SSH byte stream). `_proxy` and `prepare` never call client
-  hooks, never touch settings.json.
+  hooks, never touch the Mac's settings.json.
+- PREP adds `remote.autoForwardPortsSource: process` to the box's Machine
+  settings (`~/.vscode-server/data/Machine/settings.json`), never to the
+  Mac's, so other remotes keep their setting. It adds only that key, only
+  when the file does not name it (a comment counts: the user's value always
+  wins), keeps everything else in it, leaves a symlink or a file it cannot
+  read alone, and a failure there never stops the connection. It is not in the
+  loadout hook: a VS Code connection always goes through PREP first. This is
+  the one VS Code path in the otherwise editor-neutral plumbing.
 - `ssh-config` is an opt-in gate: nothing under `~/.ssh` is touched until it
   has run. `ssh-config --remove` leaves `~/.ssh/config` byte-identical to
   before install; `--print` writes nothing. Other tools' Include lines are
@@ -121,6 +129,15 @@ the editor-specific constants, settings keys and loadout differ.
   one entry per session, or VS Code asks for the platform.
 - `remote.SSH.useLocalServer: false` keeps one ssh per window, so every
   window runs `_proxy` and the in-use check sees it.
+- Remote-SSH sets `candidatePortSource` to Output, which registers a default
+  of `remote.autoForwardPortsSource: output` and leaves VS Code's `/proc`
+  port finder off (read in Remote-SSH 0.128.0 and VS Code 1.144.0). A
+  listener that prints no URL is then forwarded only by the tunnel VS Code
+  opens for a URL it opens itself, after the trusted-domain dialog: Claude's
+  login callback (a random 127.0.0.1 port) was refused when its URL was
+  copied to a browser. Machine settings outrank that default and a user
+  value on the Mac. Cursor's remote extension does not set this, so min-cursor
+  needs no such step.
 - VS Code's exec server keeps the CLI at `~/.vscode-server/code-<commit>`
   and the server in `~/.vscode-server/cli/servers/Stable-<commit>/server`
   (seen in a box with VS Code 1.143.0, 2026-10-28).
@@ -155,6 +172,12 @@ the editor-specific constants, settings keys and loadout differ.
 
 ## Unverified (needs a live session)
 
+- Claude login with `claude.com` untrusted: Copy in the dialog, paste into a
+  browser, ERR_CONNECTION_REFUSED before the Machine settings step and a
+  working login with the port in the Ports view after it. The diagnosis and
+  the path `~/.vscode-server/data/Machine/settings.json` come from reading
+  Remote-SSH 0.128.0 and the VS Code 1.144.0 workbench and server; neither
+  was run against a box.
 - The unsaved-changes modal's detail and the `--force` destroy after it.
 - The folder picker from a remote window starts on the Mac.
 - Destroying the box a window is on closes that remote connection.
