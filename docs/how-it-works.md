@@ -59,7 +59,7 @@ once the old one is gone) gets a new id and heals on its first connect;
 ### Box ids
 
 min 0.8 ([gominimal/minimal#2756](https://github.com/gominimal/minimal/pull/2756))
-made a session name an alias: only a pending, starting or running box
+made a session name an alias: only a pending, materializing or running box
 holds it, a stopped box keeps it, a new box may take it, and min resolves a
 name to the running box, else the latest. Every min command min-vscode runs
 on one box takes a full session id first, so min-vscode addresses its own
@@ -74,10 +74,12 @@ Own means: a key dir whose recorded id `min ls` lists under the dir's name
 (a box renamed outside min-vscode, or another tool's box that took the
 name, is not own). Own boxes are the ones that get a stanza and a
 `remote.SSH.remotePlatform` entry. A key dir from before ids is adopted, its
-id written, when exactly one box has its name (by a command that acts on
-the box: `ssh-config --print`, `config --print`, `status`, completions and
-`doctor` count it own without writing; `doctor` says it will be adopted);
-with several, none is own, no stanza is written for it, and `doctor` warns.
+id written, when exactly one box has its name, by a command that acts on
+the box (`open`, `attach`, `ssh`, `_proxy`, `destroy`, `gc`). `ssh-config`,
+`config`, `setup`, `status`, `gc --dry-run`, completions and `doctor` count
+it own without writing (`doctor` says it will be adopted). With several,
+none is own, no stanza is written for it, and `doctor` warns; so does one
+box of that name that min lists with no usable id.
 The adoption has a risk: a legacy key dir whose own box is long gone adopts
 the one box that now holds the name, whoever made it. "Gone" is a
 successful `min ls` that no longer lists the recorded id. A recorded id is

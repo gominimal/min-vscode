@@ -21,6 +21,11 @@ box, where `min-vscode` is not installed.
 `--no-window` does everything but open the window; the extension opens it
 itself (`vscode-remote://ssh-remote+min-vscode.NAME/workbench`).
 
+Internal flags, for the extension: `attach --own NAME` and `destroy --own
+NAME` take NAME as a row of its own-box list, which may be stale: when NAME
+is no longer min-vscode's own box (another tool's box took the name), they
+refuse instead of reaching it.
+
 Names: without `-n`, min names a new session (`<dir>-<hex>`, e.g.
 `myproject-3f9c`), and min-vscode takes the one new session for the path.
 Every name, min's or a `-n NAME`, must match `^[a-z0-9][a-z0-9-]*$`: names

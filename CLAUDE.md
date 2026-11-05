@@ -65,8 +65,11 @@ the editor-specific constants, settings keys and loadout differ.
   by `destroy_one`) only when a successful `min ls` no longer lists its id; a
   failed `min ls` keeps everything (ssh-config not rewritten), warns, and
   after a y exits non-zero; `destroy NAME` drops what was kept once a
-  successful `min ls` lists neither the recorded id under NAME nor any box
-  named NAME.
+  successful `min ls` no longer lists the recorded id, even while another
+  box holds the name (a key dir with no id: once no box is named NAME).
+  `min_ls` fails on output with no `sessions` array (a warning line, none
+  at all), and
+  `own_filter` fails with its jq, so neither ever reads as "no box".
 - Every min call aimed at one box passes its id, never its name (min 0.8
   resolves a name to whichever box holds it): `session exec` (prepare,
   `_proxy`'s exec, `proxy_command`) and `session destroy` (`destroy_one`).
@@ -76,9 +79,11 @@ the editor-specific constants, settings keys and loadout differ.
   reaches a command line or a stanza. `pick_id`/`box_id` resolve NAME: own
   (the recorded id, listed under NAME); a key dir with no `id` adopts the
   one box named NAME (and writes it, except under `PICK_NOADOPT=1`, which
-  `ssh-config --print`, `config --print`, `status`, `_sessions` and
-  `doctor` set: they only report, and count it own without writing);
-  several boxes named NAME, none recorded, or a bad `id` file: no id
+  `ssh-config`, `config`, `setup` (all their forms), `status`, `gc
+  --dry-run`, `_sessions` and `doctor` set: they act on no one box, and
+  count it own without writing; only open/attach/ssh/`_proxy`/destroy/gc
+  adopt); several boxes named NAME, none recorded, a bad `id` file, or one
+  listed box named NAME with no usable id (`pick_id` 7): no id
   (`box_id` status 2, `BWHY`), so an explicit NAME dies saying why, `doctor`
   warns, it is not own and gets no stanza or settings entry; never a
   by-name call. A recorded id is never traded for a box found by name: ours
@@ -86,7 +91,9 @@ the editor-specific constants, settings keys and loadout differ.
   status 5, "your box NAME is gone": `destroy NAME` drops only our keys and
   records, everything else refuses; ours listed under another name
   (`pick_id` 6) is refused everywhere. A NAME chosen from the own list (the
-  cwd, the `attach` picker) resolves with `own`. A failed `min ls` keeps
+  cwd, the `attach` picker, and the extension's view: hidden `--own` on
+  `attach` and `destroy`) resolves with `own`; with `--own`, a NAME that is
+  no own box any more dies ("NAME is not a box of min-vscode's", or `BWHY`). A failed `min ls` keeps
   every stanza but a bad-id one. An explicit NAME that is not own and has
   no recorded id reaches the one box of that name (`attach`, `ssh`, `open
   -n`, `destroy`), refused when several share it; `_proxy NAME` only an own
@@ -122,12 +129,13 @@ the editor-specific constants, settings keys and loadout differ.
   file (a checkout or an older extension dir); stanzas bake the
   `~/.local/bin` link, so it follows the extension across updates.
 - The extension never decides a destroy itself: a modal's destructive button
-  is the explicit y (`destroy -y`); unsaved changes (exit 4, min refused
+  is the explicit y (`destroy -y`); every `destroy` and `attach` it sends
+  carries `--own`, so a stale row never reaches another tool's box; unsaved changes (exit 4, min refused
   without a terminal) need a second modal before `destroy -y --force`;
   clean-up calls `destroy -y --if-idle`, which re-checks `gc_still_idle`
   (exit 3 when in use). It lists only own sessions, runs `setup` on startup
   only once `~/.ssh/min-vscode.conf` exists, and prunes VS Code's recent list
-  only from a successful `status --json`.
+  only from a successful `status --json`, keeping the names of own boxes.
 
 ## External facts that bite
 

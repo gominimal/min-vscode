@@ -480,8 +480,19 @@ case_destroy_ls_fails_once_keeps_stanza() {
     assert_file "$HOME/$CONF" "$(conf_expected alpha)"
 }
 
-# own NAME...: sessions this tool has prepared (a key dir), the only ones gc offers.
-own() { for o in "$@"; do mkdir -p "$STATE/sessions/$o"; done; }
+# own NAME...: sessions this tool has prepared (a key dir, with the fixture's
+# id recorded for a fixture name), the only ones gc offers. own_legacy
+# NAME...: a key dir from before ids (no id file).
+own() {
+    for o in "$@"; do
+        mkdir -p "$STATE/sessions/$o"
+        case $o in
+            alpha) oi=$ID_A ;; beta) oi=$ID_B ;; gamma) oi=$ID_G ;; stopped) oi=$ID_S ;; *) oi= ;;
+        esac
+        [ -z "$oi" ] || printf '%s\n' "$oi" > "$STATE/sessions/$o/id"
+    done
+}
+own_legacy() { for o in "$@"; do mkdir -p "$STATE/sessions/$o"; done; }
 
 # destroy without NAME looks only at own sessions for the cwd: another tool's
 # box for the same directory is neither picked nor counted.
@@ -2108,7 +2119,7 @@ case_ids_open_shared_name_refused() {
 
 # a key dir from before ids, and exactly one box of that name: its id is adopted
 case_ids_legacy_unique_adopted() {
-    own alpha
+    own_legacy alpha
     run _sessions
     assert_out_eq alpha
     assert_no_file "$STATE/sessions/alpha/id"   # completions only report
@@ -2436,6 +2447,14 @@ case_ids_report_only_no_adopt() {
     run config --print
     assert_rc 0
     assert_out_contains "${HP}alpha"
+    run gc --dry-run
+    assert_rc 0
+    # the install gates and the extension's startup setup act on no one box
+    for c in "ssh-config" "config" "setup" "config --remove" "ssh-config --remove" "setup --remove"; do
+        # shellcheck disable=SC2086  # a command and its words
+        run $c
+        assert_no_file "$STATE/sessions/alpha/id"
+    done
     run doctor
     assert_out_contains "alpha will adopt box $ID_A on next use"
     assert_no_file "$STATE/sessions/alpha/id"
@@ -2457,6 +2476,82 @@ case_ids_status_skips_unnamed() {
     run status
     assert_rc 0
     ! grep -q "$THEIRS" "$T/out" || fail "status table: $(cat "$T/out")"
+}
+
+# a min ls that exits 0 with output jq cannot read is a failed one: nothing
+# of ours is pruned, and destroy fails
+case_ids_unreadable_ls_keeps_everything() {
+    mkdir -p "$HOME/.ssh" && : > "$HOME/$CONF"
+    alpha_facts
+    run ssh-config
+    run config
+    assert_rc 0
+    assert_file_contains "$HOME/$CONF" "Host ${HP}alpha"
+    printf 'warning: update available\n{"sessions":[]}\n' > "$FIXTURES/sessions.json"
+    reset_log
+    run destroy -y alpha
+    assert_rc_nonzero
+    assert_err_contains "min ls failed"
+    assert_log_not_contains "session destroy"
+    assert_file "$STATE/sessions/alpha/id" "$ID_A"
+    run ssh-config
+    assert_file_contains "$HOME/$CONF" "Host ${HP}alpha"
+    run config
+    [ "$(settings_get '.["remote.SSH.remotePlatform"] | has("'"${HP}alpha"'")')" = true ] || fail "settings entry for alpha pruned"
+    run attach alpha --no-window
+    assert_rc 1
+    run status --json
+    assert_rc 1
+    # empty output, and JSON with no session list, are no listing either
+    for junk in '' '{}' '{"sessions":null}'; do
+        printf '%s' "$junk" > "$FIXTURES/sessions.json"
+        reset_log
+        run destroy -y alpha
+        assert_rc_nonzero
+        assert_log_not_contains "session destroy"
+        assert_file "$STATE/sessions/alpha/id" "$ID_A"
+    done
+}
+
+# a legacy key dir and a box of that name min lists with no id: never "no
+# box", so destroy keeps the keys and says why
+case_ids_listed_without_id_not_gone() {
+    own_legacy alpha; printf 'box\n' > "$STATE/sessions/alpha/user"
+    printf '{"sessions":[{"id":null,"name":"alpha","project_path":"/x","status":"active"}]}\n' > "$FIXTURES/sessions.json"
+    reset_log
+    run destroy -y alpha
+    assert_rc 1
+    assert_err_contains "min lists a box named alpha with no session id $TOOL can reach it by"
+    assert_log_not_contains "session destroy"
+    [ -d "$STATE/sessions/alpha" ] || fail "keys dropped though min lists alpha"
+    run doctor
+    assert_out_contains "min lists a box named alpha with no session id"
+}
+
+# --own (the extension's view, maybe stale): a name that is no own box any
+# more never reaches the box that took it
+case_ids_own_flag_refuses_foreign() {
+    mkdir -p "$HOME/.ssh" && : > "$HOME/$CONF"
+    printf '{"sessions":[{"id":"%s","name":"alpha","project_path":"/herdr","status":"active"}]}\n' "$THEIRS" > "$FIXTURES/sessions.json"
+    for c in "destroy -y --own alpha" "destroy -y --if-idle --own alpha" "attach --own alpha --no-window"; do
+        reset_log
+        # shellcheck disable=SC2086  # a command and its words
+        run $c
+        assert_rc 1
+        assert_err_contains "alpha is not a box of $TOOL's"
+        assert_log_not_contains "session destroy"
+        assert_log_not_contains "session exec"
+    done
+    # our own box passes
+    own alpha
+    default_fixtures
+    reset_log
+    run attach --own alpha --no-window
+    assert_rc 0
+    assert_log_contains "min session exec $ID_A sh -c <script>"
+    run destroy -y --own alpha
+    assert_rc 0
+    assert_log_contains "min session destroy $ID_A"
 }
 
 CASES="
@@ -2496,7 +2591,7 @@ ids_destroy_gone_by_id ids_gone_name_taken_never_reached ids_renamed_outside_ref
 ids_prepare_keeps_recorded_id ids_ls_failure_keeps_legacy_stanza
 ids_shared_name_reaches_ours ids_open_shared_name_refused ids_legacy_unique_adopted
 ids_legacy_ambiguous_not_own ids_activate_records_id ids_in_use_maps_id ids_corrupt_id_refused
-ids_gone_box_not_taken_over
+ids_gone_box_not_taken_over ids_unreadable_ls_keeps_everything ids_listed_without_id_not_gone ids_own_flag_refuses_foreign
 "
 
 # Nothing under ~/.ssh unless the case opted in to ssh-config.
