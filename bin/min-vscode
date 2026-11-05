@@ -130,6 +130,17 @@ put() {
 # A `min:motd` line that differs (an older one) is replaced. bash login shells
 # (sshd's) read ~/.bash_profile: one is created that sources ~/.bashrc, or a
 # marked `min:bashrc` line is added to one that does not mention it.
+# Remote-SSH defaults remote.autoForwardPortsSource to output, which leaves
+# VS Code's /proc port finder off: a listener that prints no URL, as Claude's
+# login callback does, is then forwarded only if VS Code opens its login URL
+# itself, and refused when the URL is copied to a browser instead. The box's
+# Machine settings (data/Machine under the server's data dir, ~/.vscode-server
+# unless the Mac sets remote.SSH.serverInstallPath) outrank that default, so
+# PREP adds "process" there before the server starts: the only VS Code path in
+# the plumbing, and in the box, so the Mac's settings.json and other remotes
+# are left alone. A file already naming the key (even in a comment) is the
+# user's choice. It is left as it is too when it is a symlink or does not start
+# with `{` after blank and // lines; failing here must not stop the connection.
 # shellcheck disable=SC2016
 PREP='set -eu
 umask 077
@@ -176,6 +187,15 @@ if [ ! -e "$HOME/.bash_profile" ]; then
 elif ! grep -Eqs "(min:bashrc|\.bashrc)" "$HOME/.bash_profile"; then
   [ -z "$(tail -c 1 "$HOME/.bash_profile")" ] || echo >> "$HOME/.bash_profile"
   printf "%s\n" "# min:bashrc (managed by $0)" "[ -f \"\$HOME/.bashrc\" ] && . \"\$HOME/.bashrc\"" >> "$HOME/.bash_profile"
+fi
+v="$HOME/.vscode-server/data/Machine/settings.json"
+if [ ! -L "$v" ] && ! grep -qsF remote.autoForwardPortsSource "$v"; then
+  { mkdir -p "${v%/*}" && { [ -s "$v" ] || echo "{}" > "$v"; } && awk "{ s = s \$0 \"\n\" } END {
+    if (!match(s, /^([ \t\r\n]|\/\/[^\n]*)*[{]/)) exit 1
+    h = substr(s, 1, RLENGTH); r = substr(s, RLENGTH + 1)
+    c = r ~ /^([ \t\r\n]|\/\/[^\n]*)*[}]/ ? \"\" : \",\"
+    printf \"%s\n\t\\\"remote.autoForwardPortsSource\\\": \\\"process\\\"%s%s%s\", h, c, r ~ /^[}]/ ? \"\n\" : \"\", r
+  }" "$v" > "$v.$$" && mv -f "$v.$$" "$v"; } 2>/dev/null || rm -f "$v.$$" 2>/dev/null || true
 fi
 echo "user=$(id -un)"
 echo "home=$HOME"

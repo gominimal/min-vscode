@@ -45,6 +45,11 @@ PUBKEY`. PREP, in the box:
 - appends the `min:workbench` and `min:motd` rc lines (each unless there; an older `min:motd` line is replaced) and a `~/.bash_profile` that sources
   `~/.bashrc` (or, when one exists without a mention of `~/.bashrc`, a marked
   `min:bashrc` line in it);
+- adds `"remote.autoForwardPortsSource": "process"` to VS Code's Machine
+  settings (`~/.vscode-server/data/Machine/settings.json`) unless that file
+  names the key, is a symlink or cannot be read, so VS Code forwards ports
+  that print no URL ([Ports](vscode.md#vs-codes-remote-ssh-and-a-box));
+  a failure here does not stop the connection;
 - prints `user=`, `home=`, `sshd=`, `hostkey=`.
 
 The host validates every fact (they come from an untrusted box), then writes

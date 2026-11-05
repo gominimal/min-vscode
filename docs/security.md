@@ -25,6 +25,8 @@
   turn them on, and the box's sshd runs with `AllowAgentForwarding=no` and
   `X11Forwarding=no`. An explicit `ssh -A min-vscode.NAME` still wins on the
   client; then only the box's sshd refuses it (defence in depth, not a
-  boundary). Port forwards work.
+  boundary). Port forwards work, and VS Code auto-forwards every port a box
+  listens on to the Mac's localhost
+  ([Ports](vscode.md#vs-codes-remote-ssh-and-a-box) has how to turn that off).
 - **Boxes are never woken to be asked.** `gc` and `status` read the host's
   process table to tell what is in use; no box is contacted to find out.
