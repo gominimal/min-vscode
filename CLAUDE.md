@@ -203,7 +203,9 @@ the editor-specific constants, settings keys and loadout differ.
   and the server in `~/.vscode-server/cli/servers/Stable-<commit>/server`
   (seen in a box with VS Code 1.143.0, 2026-10-28).
 - The box is uid 1000 with `$HOME=/home`, aarch64, glibc 2.44, has bash, tar,
-  curl, python3, zsh; `sshd` at `/usr/sbin/sshd`.
+  curl and awk (GNU Awk 5.4.1; seen 2026-11-10); `sshd` at `/usr/sbin/sshd`.
+  No python3 or zsh unless a loadout or the project brings them; these
+  loadouts need neither.
 - sshd scrubs the environment: PREP writes `~/.ssh/environment` (filtering
   `PROMPT_COMMAND`, the attach shell's banner trigger) and sshd runs with
   `PermitUserEnvironment=yes`. `MINIMAL_MOTD` is kept: the `min:motd` rc line
@@ -215,6 +217,11 @@ the editor-specific constants, settings keys and loadout differ.
   differs, and add a marked `min:bashrc` line to an existing
   `~/.bash_profile` that does not mention `~/.bashrc` (sshd starts a bash
   login shell, which reads only that file).
+- The box's `env` (coreutils 9.12) shell-quotes values (`X='a b'`), and
+  sshd reads `~/.ssh/environment` literally, quotes included: both writers
+  dump the environment with awk's `ENVIRON` (`env` only without awk),
+  dropping multi-line values whole. gawk adds `AWKPATH`/`AWKLIBPATH` to
+  `ENVIRON` when unset; they are left in (filtering would drop a user's own).
 - In the box, the host key and `authorized_keys` live in `~/.ssh/min-vscode/`.
 - Without a terminal, `min session destroy` refuses a box with unsaved
   changes ("refusing to destroy the session without confirmation; pass
@@ -245,11 +252,10 @@ the editor-specific constants, settings keys and loadout differ.
 - Copilot and Claude Code use the skills (they are copied to
   `~/.copilot/skills` and `~/.claude/skills` on the Mac and in the box;
   seen 2026-10-28).
-- The env of `min session exec` (where PREP runs) has MINIMAL_MOTD; without
-  it, PREP rewrites `~/.ssh/environment` without it and no ssh shell shows
-  the banner.
 - Over real sshd (`PermitUserEnvironment=yes` reading a `MINIMAL_MOTD`
   value from `~/.ssh/environment`), a VS Code terminal and an interactive
   `min-vscode ssh` shell show the banner once, the remote shell-env probe
   prints nothing, and a `min session attach` shell keeps minimald's own
   banner (the tests run the rc lines in local bash and zsh, not over sshd).
+  Seen 2026-11-10 (min 0.7.3-rc2): an interactive `min-vscode ssh` shell
+  shows it once.

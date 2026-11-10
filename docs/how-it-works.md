@@ -41,7 +41,9 @@ PUBKEY`, ID being the box's id (below). PREP, in the box:
   locks broken by one waiter at a time; the pair renamed into place whole),
   so concurrent connects agree on one key;
 - writes `authorized_keys`;
-- rewrites `~/.ssh/environment` from `env`, without `PROMPT_COMMAND`;
+- rewrites `~/.ssh/environment` from awk's `ENVIRON` (raw `NAME=value`
+  lines; `env` only without awk, since the box's `env` quotes values),
+  without `PROMPT_COMMAND`;
 - appends the `min:workbench` and `min:motd` rc lines (each unless there; an older `min:motd` line is replaced) and a `~/.bash_profile` that sources
   `~/.bashrc` (or, when one exists without a mention of `~/.bashrc`, a marked
   `min:bashrc` line in it);
