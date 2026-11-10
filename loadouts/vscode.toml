@@ -12,7 +12,7 @@ description = "sshd for VS Code Remote-SSH (min-vscode)"
 # The box user is uid 1000 with $HOME=/home; every path below hangs off it.
 
 # openssh supplies sshd and ssh-keygen.
-# The box already has bash, tar, curl, python3 and zsh,
+# The box already has bash, tar and curl,
 # which covers VS Code's server; curl is listed so VS Code's installer never
 # depends on the base image. rsync works over
 # `min-vscode.NAME` with xxhash, its missing runtime library. git: VS Code's
