@@ -10,15 +10,13 @@ All notable changes to this project are documented here. The format follows
 - Minimal's banner now shows in ssh shells: each new VS Code terminal and an
   interactive `min-vscode ssh` session print it once, with
   "exit or close the terminal" as the detach hint. `min session attach`
-  shells are unchanged.
+  shells are unchanged. `~/.ssh/environment` is written from awk's
+  `ENVIRON`, as raw `NAME=value` lines, because the box's `env` (coreutils
+  9.12) shell-quotes values and sshd would keep the quotes; a multi-line
+  value is left out.
 
 ### Fixed
 
-- Minimal's banner was missing in ssh shells on boxes whose `env` quotes
-  values (coreutils 9.12): sshd kept the quotes from `~/.ssh/environment`,
-  so `MINIMAL_MOTD`, and any value with spaces or quotes, arrived wrapped in
-  them. Both writers now dump the environment with awk's `ENVIRON`, as raw
-  `NAME=value` lines (`env` only when the box has no awk).
 - Shells over ssh in a box whose `~/.bash_profile` (a user loadout's) does
   not source `~/.bashrc` now get the `min:workbench` and `min:motd` lines
   too: both writers add a marked `min:bashrc` line that sources it.

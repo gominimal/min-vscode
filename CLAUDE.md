@@ -157,7 +157,9 @@ the editor-specific constants, settings keys and loadout differ.
   login shell, which reads only that file).
 - The box's `env` (coreutils 9.12) shell-quotes values (`X='a b'`), and
   sshd reads `~/.ssh/environment` literally, quotes included: both writers
-  dump the environment with awk's `ENVIRON` (`env` only without awk).
+  dump the environment with awk's `ENVIRON` (`env` only without awk),
+  dropping multi-line values whole. gawk adds `AWKPATH`/`AWKLIBPATH` to
+  `ENVIRON` when unset; they are left in (filtering would drop a user's own).
 - In the box, the host key and `authorized_keys` live in `~/.ssh/min-vscode/`.
 - Without a terminal, `min session destroy` refuses a box with unsaved
   changes ("refusing to destroy the session without confirmation; pass
@@ -188,6 +190,8 @@ the editor-specific constants, settings keys and loadout differ.
 - Copilot and Claude Code use the skills (they are copied to
   `~/.copilot/skills` and `~/.claude/skills` on the Mac and in the box;
   seen 2026-10-28).
+- The box has an awk; without one, both writers fall back to the quoting
+  `env` and the banner stays broken on coreutils 9.12.
 - The env of `min session exec` (where PREP runs) has MINIMAL_MOTD; without
   it, PREP rewrites `~/.ssh/environment` without it and no ssh shell shows
   the banner.
