@@ -43,6 +43,13 @@ All notable changes to this project are documented here. The format follows
   kept, with a warning, and after a `y` the command exits non-zero (min's
   own status, or 1 when min destroyed the box). Once `min ls` no longer
   lists the box, `destroy NAME` removes what was kept.
+- Claude sign-in in a box no longer ends on `localhost:PORT/callback` with
+  ERR_CONNECTION_REFUSED when its URL is copied to a browser. Remote-SSH
+  leaves VS Code's port finder off, so nothing forwarded the callback port;
+  each connect now adds `"remote.autoForwardPortsSource": "process"` to the
+  box's Machine settings, only when that file does not name the key. As a
+  result VS Code auto-forwards every new listening port in a box, as Cursor
+  does. The Mac's settings.json and other remotes are unchanged.
 
 ## [0.2.0] - 2026-10-28
 

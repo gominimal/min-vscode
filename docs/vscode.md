@@ -63,6 +63,23 @@ another box that took the name: [Box ids](how-it-works.md#box-ids)).
   `~/.vscode-server/cli/servers/Stable-<commit>/server`, downloaded from
   `update.code.visualstudio.com` (seen in a box with VS Code 1.143.0,
   2026-10-28).
+- **Ports.** Remote-SSH makes VS Code watch terminal output for URLs instead
+  of the box's listening ports, so a port that prints no URL is never
+  forwarded; Claude's sign-in callback is one. On every connect min-vscode
+  adds `"remote.autoForwardPortsSource": "process"` to the box's Machine
+  settings (`~/.vscode-server/data/Machine/settings.json`, which is what
+  **Preferences: Open Remote Settings** edits), before the server starts. Your
+  settings on the Mac and your other remotes are not changed.
+  - VS Code now auto-forwards every new listening port in a box, as Cursor
+    does: more entries in the Ports view, each bound to the Mac's localhost.
+    To change that for a box, set `remote.autoForwardPorts` or
+    `remote.autoForwardPortsSource` in its Remote Settings.
+  - A value already in that file, even commented out, is kept and never
+    rewritten. Machine settings outrank the Mac's user settings, so a value
+    in your Mac's settings.json no longer reaches a box: set it in the box's
+    Remote Settings.
+  - The file is left alone when it is a symlink, or when it does not open
+    with `{` after blank and `//` lines. Then add the key by hand.
 - **Agent forwarding** stays off: the stanza says `ForwardAgent no` and the
   box's sshd refuses it anyway.
 
@@ -139,6 +156,14 @@ the box instead of guessing.
   `min-vscode attach NAME`.
 - **Host key changed after recreating a session.** Reconnect: `_proxy`
   re-pins before sshd starts.
+- **Claude login fails in a box.** The browser authorizes, then
+  `localhost:PORT/callback` fails with `ERR_CONNECTION_REFUSED`. Workaround:
+  in VS Code's "Do you want Code to open the external website?" dialog,
+  choose **Configure Trusted Domains** and trust `claude.com` and all its
+  subdomains, then sign in again. Or sign in without the callback: open the
+  URL Claude prints in any browser and paste the code it returns back into
+  Claude. These are workarounds; the cause is not confirmed. Each box needs
+  its own sign-in.
 - **Window opens but the terminal is in `/home`.** The `min:workbench` rc
   line moves interactive shells that start in `$HOME`; sessions without the
   loadout get it on the next connect.

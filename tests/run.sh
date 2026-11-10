@@ -1815,6 +1815,93 @@ case_prep_stale_lock_stress() {
     done
 }
 
+# Remote-SSH's default leaves VS Code's port finder off; the box's Machine
+# settings turn it back on, so a port that prints no URL (Claude's login
+# callback) is forwarded. MS: that file, under $T/box.
+MS=.vscode-server/data/Machine/settings.json
+AFPS='"remote.autoForwardPortsSource"'
+
+case_prep_machine_settings_created() {
+    run_prep "$T/p1" || fail "PREP failed: $(cat "$T/p1.err")"
+    assert_facts_only "$T/p1"
+    [ "$(jq -c . "$T/box/$MS")" = "{$AFPS:\"process\"}" ] || fail "settings: $(cat "$T/box/$MS")"
+    cp "$T/box/$MS" "$T/first"
+    run_prep "$T/p2" || fail "second PREP failed"
+    cmp -s "$T/first" "$T/box/$MS" || fail "second PREP changed it: $(cat "$T/box/$MS")"
+    [ -z "$(find "$T/box/.vscode-server" -name 'settings.json.*')" ] || fail "temp file left behind"
+}
+
+# A value of the user's, whatever it is, stays: the file keeps every byte.
+case_prep_machine_settings_keeps_user_value() {
+    mkdir -p "$T/box/${MS%/*}"
+    for v in output hybrid process; do
+        printf '// mine\n{\n  %s: "%s" , "a": 1\n}' "$AFPS" "$v" > "$T/box/$MS"
+        cp "$T/box/$MS" "$T/want"
+        run_prep "$T/p1" || fail "PREP failed: $(cat "$T/p1.err")"
+        cmp -s "$T/want" "$T/box/$MS" || fail "$v rewritten: $(cat "$T/box/$MS")"
+    done
+    # commented out is still the user's call
+    printf '{\n  // %s: "output",\n  "a": 1\n}\n' "$AFPS" > "$T/box/$MS"
+    cp "$T/box/$MS" "$T/want"
+    run_prep "$T/p1" || fail "PREP failed: $(cat "$T/p1.err")"
+    cmp -s "$T/want" "$T/box/$MS" || fail "commented key rewritten: $(cat "$T/box/$MS")"
+}
+
+# machine_shape BEFORE AFTER: PREP turns BEFORE into AFTER (both with \n
+# escapes); $K is the line it adds. A second PREP changes nothing.
+machine_shape() {
+    printf '%b' "$1" > "$T/box/$MS"
+    run_prep "$T/p1" || fail "PREP failed: $(cat "$T/p1.err")"
+    printf '%b' "$2" > "$T/want"
+    cmp -s "$T/want" "$T/box/$MS" || fail "from '$1': $(cat "$T/box/$MS")"
+    run_prep "$T/p2" || fail "second PREP failed"
+    cmp -s "$T/want" "$T/box/$MS" || fail "second PREP changed '$1': $(cat "$T/box/$MS")"
+}
+
+case_prep_machine_settings_keeps_other_keys() {
+    mkdir -p "$T/box/${MS%/*}"
+    K="\t$AFPS: \"process\""
+    machine_shape '{\n  "a": 1,\n  "b": {"c": "d"}\n}\n' "{\n$K,\n  \"a\": 1,\n  \"b\": {\"c\": \"d\"}\n}\n"
+    jq -e '.a == 1 and .b.c == "d" and ."remote.autoForwardPortsSource" == "process"' "$T/box/$MS" > /dev/null ||
+        fail "not the settings it should be: $(cat "$T/box/$MS")"
+    machine_shape '// head { not this one\n\n{ // tail\n  "a": 1 // why\n}\n' "// head { not this one\n\n{\n$K, // tail\n  \"a\": 1 // why\n}\n"
+    machine_shape '{\r\n  "a": 1\r\n}\r\n' "{\n$K,\r\n  \"a\": 1\r\n}\r\n"
+    machine_shape '{"files.exclude": {"**/*.pyc": true}}' "{\n$K,\"files.exclude\": {\"**/*.pyc\": true}}\n"
+    # nothing after the brace: no comma, or the file would not parse
+    machine_shape '{}\n' "{\n$K\n}\n"
+    machine_shape '{\n}\n' "{\n$K\n}\n"
+    machine_shape '// Place your settings here\n{\n}\n' "// Place your settings here\n{\n$K\n}\n"
+    machine_shape '{\n  // "a": 1\n}\n' "{\n$K\n  // \"a\": 1\n}\n"
+    machine_shape '' "{\n$K\n}\n"
+}
+
+# What PREP cannot place the key in safely it leaves, and the connect goes on.
+case_prep_machine_settings_leaves_what_it_cannot_read() {
+    mkdir -p "$T/box/${MS%/*}"
+    for c in 'not json' '[1, 2]' '/* mine */ {"a": 1}' '   '; do
+        printf '%s' "$c" > "$T/box/$MS"
+        cp "$T/box/$MS" "$T/want"
+        run_prep "$T/p1" || fail "PREP failed: $(cat "$T/p1.err")"
+        assert_facts_only "$T/p1"
+        cmp -s "$T/want" "$T/box/$MS" || fail "'$c' rewritten: $(cat "$T/box/$MS")"
+        [ -z "$(find "$T/box/.vscode-server" -name 'settings.json.*')" ] || fail "temp file left behind for '$c'"
+    done
+    rm "$T/box/$MS"
+    printf '{"a": 1}\n' > "$T/dotfile"
+    ln -s "$T/dotfile" "$T/box/$MS"
+    run_prep "$T/p1" || fail "PREP failed: $(cat "$T/p1.err")"
+    [ -L "$T/box/$MS" ] || fail "symlink replaced"
+    assert_file "$T/dotfile" '{"a": 1}'
+}
+
+case_prep_machine_settings_failure_does_not_stop_connect() {
+    mkdir -p "$T/box"
+    : > "$T/box/.vscode-server"     # a file where the server's dir goes
+    run_prep "$T/p1" || fail "PREP failed: $(cat "$T/p1.err")"
+    assert_facts_only "$T/p1"
+    [ ! -s "$T/p1.err" ] || fail "stderr: $(cat "$T/p1.err")"
+}
+
 # ---- misc ----------------------------------------------------------------------
 
 case_completions_parse() {
@@ -2907,6 +2994,8 @@ prepare_errors_strip_control_bytes stored_user_checked_on_read proxy_rechecks_st
 prep_extracts_and_prints_facts prep_env_keeps_motd
 prep_waiter_keeps_lock_it_does_not_own prep_breaks_stale_lock prep_concurrent_runs_agree_on_host_key
 prep_regenerates_half_pair prep_keygen_failure_releases_lock prep_stale_lock_stress
+prep_machine_settings_created prep_machine_settings_keeps_user_value prep_machine_settings_keeps_other_keys
+prep_machine_settings_leaves_what_it_cannot_read prep_machine_settings_failure_does_not_stop_connect
 open_default_loadouts_toml_forms sshconfig_lock_held_waits_then_fails
 sshconfig_two_tools_install_at_once gc_rechecks_before_each_question bad_session_name_refused
 completions_parse sessions_lists_names usage sshconfig_two_tools_coexist open_keeps_default_loadouts safety_gui_commands_absolute
