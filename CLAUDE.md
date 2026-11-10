@@ -142,8 +142,9 @@ the editor-specific constants, settings keys and loadout differ.
   and the server in `~/.vscode-server/cli/servers/Stable-<commit>/server`
   (seen in a box with VS Code 1.143.0, 2026-10-28).
 - The box is uid 1000 with `$HOME=/home`, aarch64, glibc 2.44, has bash, tar,
-  curl; `sshd` at `/usr/sbin/sshd`. No python3 or zsh unless a loadout or the
-  project brings them; these loadouts need neither.
+  curl and awk (GNU Awk 5.4.1; seen 2026-11-10); `sshd` at `/usr/sbin/sshd`.
+  No python3 or zsh unless a loadout or the project brings them; these
+  loadouts need neither.
 - sshd scrubs the environment: PREP writes `~/.ssh/environment` (filtering
   `PROMPT_COMMAND`, the attach shell's banner trigger) and sshd runs with
   `PermitUserEnvironment=yes`. `MINIMAL_MOTD` is kept: the `min:motd` rc line
@@ -190,13 +191,10 @@ the editor-specific constants, settings keys and loadout differ.
 - Copilot and Claude Code use the skills (they are copied to
   `~/.copilot/skills` and `~/.claude/skills` on the Mac and in the box;
   seen 2026-10-28).
-- The box has an awk; without one, both writers fall back to the quoting
-  `env` and the banner stays broken on coreutils 9.12.
-- The env of `min session exec` (where PREP runs) has MINIMAL_MOTD; without
-  it, PREP rewrites `~/.ssh/environment` without it and no ssh shell shows
-  the banner.
 - Over real sshd (`PermitUserEnvironment=yes` reading a `MINIMAL_MOTD`
   value from `~/.ssh/environment`), a VS Code terminal and an interactive
   `min-vscode ssh` shell show the banner once, the remote shell-env probe
   prints nothing, and a `min session attach` shell keeps minimald's own
   banner (the tests run the rc lines in local bash and zsh, not over sshd).
+  Seen 2026-11-10 (min 0.7.3-rc2): an interactive `min-vscode ssh` shell
+  shows it once.
