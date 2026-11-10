@@ -142,7 +142,8 @@ the editor-specific constants, settings keys and loadout differ.
   and the server in `~/.vscode-server/cli/servers/Stable-<commit>/server`
   (seen in a box with VS Code 1.143.0, 2026-10-28).
 - The box is uid 1000 with `$HOME=/home`, aarch64, glibc 2.44, has bash, tar,
-  curl, python3, zsh; `sshd` at `/usr/sbin/sshd`.
+  curl; `sshd` at `/usr/sbin/sshd`. No python3 or zsh unless a loadout or the
+  project brings them; these loadouts need neither.
 - sshd scrubs the environment: PREP writes `~/.ssh/environment` (filtering
   `PROMPT_COMMAND`, the attach shell's banner trigger) and sshd runs with
   `PermitUserEnvironment=yes`. `MINIMAL_MOTD` is kept: the `min:motd` rc line
