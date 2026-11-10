@@ -155,6 +155,9 @@ the editor-specific constants, settings keys and loadout differ.
   differs, and add a marked `min:bashrc` line to an existing
   `~/.bash_profile` that does not mention `~/.bashrc` (sshd starts a bash
   login shell, which reads only that file).
+- The box's `env` (coreutils 9.12) shell-quotes values (`X='a b'`), and
+  sshd reads `~/.ssh/environment` literally, quotes included: both writers
+  dump the environment with awk's `ENVIRON` (`env` only without awk).
 - In the box, the host key and `authorized_keys` live in `~/.ssh/min-vscode/`.
 - Without a terminal, `min session destroy` refuses a box with unsaved
   changes ("refusing to destroy the session without confirmation; pass
