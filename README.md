@@ -53,7 +53,7 @@ brew install jq just node
 Build the extension and install it into VS Code:
 
 ```sh
-git clone https://github.com/norrietaylor/vscode.git min-vscode && cd min-vscode
+git clone https://github.com/gominimal/min-vscode.git min-vscode && cd min-vscode
 just vsix
 code --install-extension min-vscode.vsix
 ```
