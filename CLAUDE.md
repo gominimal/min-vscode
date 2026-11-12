@@ -5,7 +5,7 @@ over Microsoft's Remote-SSH, with sshd running inside the box behind a
 `min session exec` ProxyCommand. A VS Code extension (the Minimal view) is the
 everyday UI; it drives one POSIX shell script plus a python3 settings merger,
 which also work alone from a terminal. It is the VS Code twin of min-cursor
-([norrietaylor/cursor](https://github.com/norrietaylor/cursor)): same plumbing, extension and commands; only
+([gominimal/min-cursor](https://github.com/gominimal/min-cursor)): same plumbing, extension and commands; only
 the editor-specific constants, settings keys and loadout differ.
 
 ## Layout

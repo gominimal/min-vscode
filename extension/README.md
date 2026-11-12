@@ -55,7 +55,7 @@ A window connected to a box shows its name in the status bar.
 
 ## More
 
-- [min-vscode](https://github.com/norrietaylor/vscode): this extension and
+- [min-vscode](https://github.com/gominimal/min-vscode): this extension and
   the `min-vscode` CLI it runs, with the full docs
 - [minimal](https://github.com/gominimal/minimal): the `min` CLI, daemon and microVM host
 - [Documentation](https://minimal.dev/docs)
