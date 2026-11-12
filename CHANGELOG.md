@@ -22,7 +22,10 @@ All notable changes to this project are documented here. The format follows
   the same name is never reached under min-vscode's record or by a name
   min-vscode chose (the CLI's lists, the Minimal view, ssh stanzas,
   settings entries; `status --json` now carries each `id` and whether it is
-  the `recorded` one), except through a key dir from before ids (below); a
+  the `recorded` one), except through a key dir from before ids (below), or
+  a stanza left in `~/.ssh/min-vscode.conf` after its key dir was removed
+  (its `_proxy` reaches the one box of that name, as for a name min-vscode
+  holds nothing for); a
   box you name explicitly becomes min-vscode's once it connects. A key dir
   from before takes the id of the one box with its name when you connect
   to it, whoever made that box; when several share it, min-vscode leaves
